@@ -40,7 +40,6 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const db_1 = __importDefault(require("./lib/db"));
-const prisma = (0, db_1.default)();
 const dotenv_1 = __importDefault(require("dotenv"));
 const s3_service_1 = require("./lib/s3-service");
 const upload_middleware_1 = require("./lib/upload-middleware");
@@ -53,6 +52,8 @@ const quiz_review_service_1 = __importDefault(require("./lib/quiz-review-service
 const teacher_service_1 = __importDefault(require("./lib/teacher-service"));
 const admin_service_1 = require("./lib/admin-service");
 dotenv_1.default.config();
+// Initialize Prisma Client after environment variables are loaded
+const prisma = (0, db_1.default)();
 const app = (0, express_1.default)();
 const port = process.env.PORT || 5000;
 // Middleware
