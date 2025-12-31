@@ -3,8 +3,9 @@ import { PrismaClient } from '@prisma/client';
 // Create a function to get PrismaClient instance with proper configuration
 const getPrismaClient = () => {
   // Use environment variable directly - Prisma will automatically pick up DATABASE_URL
+  // Use simpler log configuration to avoid validation errors
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+    log: ['error'], // Only log errors in all environments
   });
 };
 
