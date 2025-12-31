@@ -1,0 +1,354 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  name               String
+  email              String?             @unique
+  passwordHash       String?
+  role               UserRole
+  teacherId          String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  achievements       Achievement[]
+  attempts           Attempt[]
+  performanceReports PerformanceReport[] @relation("PerformanceReports")
+  recommendations    Recommendation[]    @relation("Recommendations")
+  sessions           Session[]
+  skillProgress      SkillProgress[]
+  uploadedDocuments  UploadedDocument[]  @relation("UploadedDocuments")
+  quizReviews        QuizReview[]        @relation("ChildQuizReviews")
+  teacher            User?               @relation("TeacherChildren", fields: [teacherId], references: [id])
+  children           User[]              @relation("TeacherChildren")
+
+  @@index([teacherId])
+  @@index([email])
+}
+
+
+model SkillDomain {
+  id                String              @id @default(cuid())
+  code              String              @unique
+  name              String
+  description       String?
+  order             Int                 @unique
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  domainPerformance DomainPerformance[]
+  microSkills       MicroSkill[]
+
+  @@index([code])
+  @@index([order])
+}
+
+model MicroSkill {
+  id                   String              @id @default(cuid())
+  code                 String              @unique
+  name                 String
+  domainId             String
+  gameTemplate         GameTemplate
+  prerequisiteSkills   Json                @default("[]")
+  nextSkills           Json                @default("[]")
+  masteryCriteria      Json                @default("{\"timeThreshold\": 4, \"accuracyThreshold\": 80, \"confusionErrorThreshold\": 20}")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  attempts             Attempt[]
+  extractedQuestions   ExtractedQuestion[] @relation("ExtractedQuestions")
+  domain               SkillDomain         @relation(fields: [domainId], references: [id])
+  questions            Question[]
+  recommendations      Recommendation[]    @relation("SkillRecommendations")
+  skillProgress        SkillProgress[]
+  quizReviews          QuizReview[]        @relation("QuizReviewSkills")
+  recommendedInReviews QuizReview[]        @relation("RecommendedSkills")
+
+  @@index([domainId])
+  @@index([code])
+}
+
+model Question {
+  id                      String     @id @default(cuid())
+  microSkillId            String
+  difficultyLevel         Int
+  promptText              String
+  promptAudioUrl          String?
+  correctAnswer           String
+  distractors             Json       @default("[]")
+  hasConfusingDistractors Boolean    @default(false)
+  assetUrls               Json       @default("{}")
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  attempts                Attempt[]
+  microSkill              MicroSkill @relation(fields: [microSkillId], references: [id])
+
+  @@index([microSkillId])
+  @@index([difficultyLevel])
+}
+
+model Attempt {
+  id                       String     @id @default(cuid())
+  childId                  String
+  questionId               String
+  microSkillId             String
+  sessionId                String?
+  isCorrect                Boolean
+  responseTimeSeconds      Float
+  hintUsed                 Boolean    @default(false)
+  hintCount                Int        @default(0)
+  errorType                ErrorType  @default(NONE)
+  difficultyLevelAtAttempt Int
+  userResponse             String?    // Actual answer provided by child
+  confusionType            String?    // Specific confusion detected (e.g., "b_d_visual")
+  learningPattern          String?    // 'improving', 'stable', 'declining'
+  createdAt                DateTime   @default(now())
+  child                    User       @relation(fields: [childId], references: [id])
+  microSkill               MicroSkill @relation(fields: [microSkillId], references: [id])
+  question                 Question   @relation(fields: [questionId], references: [id])
+  session                  Session?   @relation(fields: [sessionId], references: [id])
+
+  @@index([childId])
+  @@index([microSkillId])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+model SkillProgress {
+  id                     String        @id @default(cuid())
+  childId                String
+  microSkillId           String
+  masteryStatus          MasteryStatus @default(NOT_STARTED)
+  currentDifficultyLevel Int           @default(1)
+  recommendedDifficulty  Int           @default(1)  // AI-recommended difficulty for next session
+  accuracyPercentage     Float         @default(0)
+  avgResponseTime        Float         @default(0)
+  totalAttempts          Int           @default(0)
+  correctAttempts        Int           @default(0)
+  confusionPatterns      Json          @default("[]") // Array of detected confusion patterns
+  learningTrend          String?       // 'improving', 'stable', 'declining'
+  aiInsights             Json          @default("[]") // AI-generated insights and recommendations
+  lastAttemptedAt        DateTime?
+  masteredAt             DateTime?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  child                  User          @relation(fields: [childId], references: [id])
+  microSkill             MicroSkill    @relation(fields: [microSkillId], references: [id])
+
+  @@unique([childId, microSkillId])
+  @@index([childId])
+  @@index([microSkillId])
+  @@index([masteryStatus])
+}
+
+model Achievement {
+  id          String    @id @default(cuid())
+  childId     String
+  badgeType   BadgeType
+  starsEarned Float     @default(0)
+  coinsEarned Int       @default(0)
+  earnedAt    DateTime  @default(now())
+  child       User      @relation(fields: [childId], references: [id])
+
+  @@index([childId])
+  @@index([earnedAt])
+}
+
+model Session {
+  id               String      @id @default(cuid())
+  childId          String
+  startedAt        DateTime    @default(now())
+  endedAt          DateTime?
+  totalTimeSeconds Int         @default(0)
+  skillsAttempted  Json        @default("[]")
+  attempts         Attempt[]
+  quizReview       QuizReview?
+  child            User        @relation(fields: [childId], references: [id])
+
+  @@index([childId])
+  @@index([startedAt])
+}
+
+model QuizReview {
+  id                  String      @id @default(cuid())
+  sessionId           String      @unique
+  childId             String
+  skillId             String
+  createdAt           DateTime    @default(now())
+  
+  // AI-generated content
+  overallPerformance  String
+  strengths           Json        // Array of strings
+  areasToImprove      Json        // Array of strings
+  specificFeedback    String
+  encouragement       String
+  confusionPatterns   Json        // Array of strings
+  
+  // Performance metrics
+  accuracy            Float
+  totalAttempts       Int
+  correctAttempts     Int
+  avgResponseTime     Float
+  
+  // Recommendation
+  recommendedSkillId  String?
+  recommendedReason   String?
+  
+  // Relations
+  session             Session     @relation(fields: [sessionId], references: [id])
+  child               User        @relation("ChildQuizReviews", fields: [childId], references: [id])
+  skill               MicroSkill  @relation("QuizReviewSkills", fields: [skillId], references: [id])
+  recommendedSkill    MicroSkill? @relation("RecommendedSkills", fields: [recommendedSkillId], references: [id])
+  
+  @@index([childId])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+
+model PerformanceReport {
+  id                String              @id @default(cuid())
+  childId           String
+  generatedAt       DateTime            @default(now())
+  reportPeriodStart DateTime
+  reportPeriodEnd   DateTime
+  overallAccuracy   Float
+  totalAttempts     Int
+  totalTimeSpent    Int
+  skillsMastered    Int
+  skillsInProgress  Int
+  strengths         Json
+  weaknesses        Json
+  confusionPatterns Json
+  recommendations   Json
+  domainPerformance DomainPerformance[]
+  child             User                @relation("PerformanceReports", fields: [childId], references: [id])
+
+  @@index([childId])
+  @@index([generatedAt])
+}
+
+model DomainPerformance {
+  id              String            @id @default(cuid())
+  reportId        String
+  domainId        String
+  accuracy        Float
+  avgResponseTime Float
+  attemptsCount   Int
+  masteryLevel    String
+  domain          SkillDomain       @relation(fields: [domainId], references: [id])
+  report          PerformanceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([domainId])
+}
+
+model Recommendation {
+  id          String     @id @default(cuid())
+  childId     String
+  skillId     String
+  reason      String
+  priority    Int
+  confidence  Float
+  createdAt   DateTime   @default(now())
+  completedAt DateTime?
+  child       User       @relation("Recommendations", fields: [childId], references: [id])
+  skill       MicroSkill @relation("SkillRecommendations", fields: [skillId], references: [id])
+
+  @@index([childId])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model UploadedDocument {
+  id                 String              @id @default(cuid())
+  uploadedBy         String?
+  fileName           String
+  fileType           String
+  fileUrl            String
+  uploadedAt         DateTime            @default(now())
+  processedAt        DateTime?
+  status             String
+  errorMessage       String?
+  extractedQuestions Int                 @default(0)
+  extractedImages    Int                 @default(0)
+  questions          ExtractedQuestion[]
+  uploader           User?               @relation("UploadedDocuments", fields: [uploadedBy], references: [id])
+
+  @@index([uploadedBy])
+  @@index([status])
+  @@index([uploadedAt])
+}
+
+model ExtractedQuestion {
+  id            String           @id @default(cuid())
+  documentId    String
+  skillId       String?
+  questionText  String
+  gameTemplate  GameTemplate     @default(TAP_SELECT)
+  difficultyLevel Int            @default(1) // 1=Easy, 2=Medium, 3=Hard
+  options       Json
+  correctAnswer String
+  explanation   String?
+  imageUrls     Json
+  pageNumber    Int?
+  confidence    Float
+  reviewStatus  String
+  createdAt     DateTime         @default(now())
+  document      UploadedDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  skill         MicroSkill?      @relation("ExtractedQuestions", fields: [skillId], references: [id])
+
+  @@index([documentId])
+  @@index([reviewStatus])
+  @@index([skillId])
+}
+
+enum UserRole {
+  CHILD
+  TEACHER
+  ADMIN
+}
+
+enum GameTemplate {
+  TAP_SELECT
+  DRAG_DROP
+  SORTING
+  PICTURE_TO_WORD
+  AUDIO_TO_LETTER
+  PUZZLE_JOIN
+  MEMORY_CARD
+  FIND_THE_WORD
+  SEQUENCING
+  ODD_ONE_OUT
+}
+
+enum MasteryStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  MASTERED
+}
+
+enum ErrorType {
+  NONE
+  B_D_CONFUSION
+  P_Q_CONFUSION
+  M_N_CONFUSION
+  U_N_CONFUSION
+  VOWEL_ERROR
+  WRONG_SOUND
+  SEQUENCING_ERROR
+  OTHER
+}
+
+enum BadgeType {
+  DOMAIN_MASTER
+  SPEED_DEMON
+  PERFECT_SCORE
+  STREAK_WARRIOR
+  FIRST_SKILL
+  TEN_SKILLS
+  FIFTY_SKILLS
+}
