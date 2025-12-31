@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from './db';
 import OpenAIService from './openai-service';
 
-const prisma = new PrismaClient();
 const ai = OpenAIService;
 
 interface PerformanceMetrics {

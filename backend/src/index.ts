@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { PrismaClient } from '@prisma/client';
+import prisma from './lib/db';
 import dotenv from 'dotenv';
 import { uploadAsset, getAssetUrl, deleteAsset, listAssets, validateAssetType } from './lib/s3-service';
 import { uploadSingle, uploadMultiple, uploadDocument } from './lib/upload-middleware';
@@ -17,10 +17,6 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
-
-// Initialize Prisma Client
-// DATABASE_URL is configured in .env and prisma.config.ts
-const prisma = new PrismaClient();
 
 // Middleware
 app.use(cors({
