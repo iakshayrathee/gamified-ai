@@ -55,7 +55,7 @@ dotenv_1.default.config();
 // Initialize Prisma Client after environment variables are loaded
 const prisma = (0, db_1.default)();
 const app = (0, express_1.default)();
-const port = process.env.PORT || 5000;
+const port = Number(process.env.PORT) || 5000;
 // Middleware
 app.use((0, cors_1.default)({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -1610,9 +1610,9 @@ app.get('/api/teacher/student/:childId/reports', async (req, res) => {
     }
 });
 // Start server
-app.listen(port, () => {
-    console.log(`🚀 Backend server running on http://localhost:${port}`);
-    console.log(`📊 Health check: http://localhost:${port}/health`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Backend server running on http://0.0.0.0:${port}`);
+    console.log(`📊 Health check: http://0.0.0.0:${port}/health`);
     console.log(`🤖 OpenAI integration enabled`);
 });
 // Graceful shutdown

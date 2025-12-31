@@ -19,7 +19,7 @@ dotenv.config();
 const prisma = getPrismaClient();
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = Number(process.env.PORT) || 5000;
 
 // Middleware
 app.use(cors({
@@ -1802,9 +1802,9 @@ app.get('/api/teacher/student/:childId/reports', async (req: Request, res: Respo
 });
 
 // Start server
-app.listen(port, () => {
-    console.log(`🚀 Backend server running on http://localhost:${port}`);
-    console.log(`📊 Health check: http://localhost:${port}/health`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Backend server running on http://0.0.0.0:${port}`);
+    console.log(`📊 Health check: http://0.0.0.0:${port}/health`);
     console.log(`🤖 OpenAI integration enabled`);
 });
 
