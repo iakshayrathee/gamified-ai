@@ -1,11 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 
-// Create a function to get PrismaClient instance with proper configuration
 const getPrismaClient = () => {
-  // Use PrismaClient without any configuration - it will automatically
-  // pick up DATABASE_URL from environment variables
-  return new PrismaClient();
+  return new PrismaClient({
+    errorFormat: process.env.NODE_ENV === 'production' ? 'minimal' : 'colorless',
+    log: [], // empty array avoids logging
+  });
 };
 
-// Export the function instead of an instantiated client
 export default getPrismaClient;
