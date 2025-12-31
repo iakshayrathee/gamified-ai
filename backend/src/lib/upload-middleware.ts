@@ -1,10 +1,10 @@
 import multer from 'multer';
 
 // Configure multer to store files in memory
-const storage = multer.memoryStorage();
+const storage = (multer as any).memoryStorage();
 
 // File filter for asset uploads (images, audio, animations)
-const assetFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const assetFileFilter = (req: any, file: any, cb: any) => {
     const allowedMimes = [
         'image/png',
         'image/jpeg',
@@ -27,7 +27,7 @@ const assetFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFil
 };
 
 // File filter for document uploads (PDF, DOCX)
-const documentFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const documentFileFilter = (req: any, file: any, cb: any) => {
     const allowedMimes = [
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
@@ -41,28 +41,37 @@ const documentFileFilter = (req: any, file: Express.Multer.File, cb: multer.File
 };
 
 // Create multer upload middleware for assets
-export const upload = multer({
+const uploadOptions = {
     storage,
     fileFilter: assetFileFilter,
     limits: {
         fileSize: 10 * 1024 * 1024, // 10MB max file size
     },
-});
+};
 
 // Create multer upload middleware for documents
-export const documentUpload = multer({
+const documentUploadOptions = {
     storage,
     fileFilter: documentFileFilter,
     limits: {
         fileSize: 10 * 1024 * 1024, // 10MB max file size
     },
-});
+};
 
 // Middleware for single file upload (assets)
-export const uploadSingle = upload.single('file');
+export const uploadSingle = (req: any, res: any, next: any) => {
+    const upload = (multer as any)(uploadOptions);
+    upload.single('file')(req, res, next);
+};
 
 // Middleware for multiple file uploads (max 10 files)
-export const uploadMultiple = upload.array('files', 10);
+export const uploadMultiple = (req: any, res: any, next: any) => {
+    const upload = (multer as any)(uploadOptions);
+    upload.array('files', 10)(req, res, next);
+};
 
 // Middleware for single document upload
-export const uploadDocument = documentUpload.single('file');
+export const uploadDocument = (req: any, res: any, next: any) => {
+    const documentUpload = (multer as any)(documentUploadOptions);
+    documentUpload.single('file')(req, res, next);
+};

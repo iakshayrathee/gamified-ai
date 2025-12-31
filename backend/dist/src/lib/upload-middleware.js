@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadDocument = exports.uploadMultiple = exports.uploadSingle = exports.documentUpload = exports.upload = void 0;
+exports.uploadDocument = exports.uploadMultiple = exports.uploadSingle = void 0;
 const multer_1 = __importDefault(require("multer"));
 // Configure multer to store files in memory
 const storage = multer_1.default.memoryStorage();
@@ -43,24 +43,36 @@ const documentFileFilter = (req, file, cb) => {
     }
 };
 // Create multer upload middleware for assets
-exports.upload = (0, multer_1.default)({
+const uploadOptions = {
     storage,
     fileFilter: assetFileFilter,
     limits: {
         fileSize: 10 * 1024 * 1024, // 10MB max file size
     },
-});
+};
 // Create multer upload middleware for documents
-exports.documentUpload = (0, multer_1.default)({
+const documentUploadOptions = {
     storage,
     fileFilter: documentFileFilter,
     limits: {
         fileSize: 10 * 1024 * 1024, // 10MB max file size
     },
-});
+};
 // Middleware for single file upload (assets)
-exports.uploadSingle = exports.upload.single('file');
+const uploadSingle = (req, res, next) => {
+    const upload = multer_1.default(uploadOptions);
+    upload.single('file')(req, res, next);
+};
+exports.uploadSingle = uploadSingle;
 // Middleware for multiple file uploads (max 10 files)
-exports.uploadMultiple = exports.upload.array('files', 10);
+const uploadMultiple = (req, res, next) => {
+    const upload = multer_1.default(uploadOptions);
+    upload.array('files', 10)(req, res, next);
+};
+exports.uploadMultiple = uploadMultiple;
 // Middleware for single document upload
-exports.uploadDocument = exports.documentUpload.single('file');
+const uploadDocument = (req, res, next) => {
+    const documentUpload = multer_1.default(documentUploadOptions);
+    documentUpload.single('file')(req, res, next);
+};
+exports.uploadDocument = uploadDocument;

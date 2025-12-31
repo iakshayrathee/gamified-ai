@@ -62,7 +62,7 @@ app.use((0, cors_1.default)({
     credentials: true
 }));
 app.use(express_1.default.json());
-app.use((0, cookie_parser_1.default)());
+app.use(cookie_parser_1.default);
 // Helper functions for skill progress calculations
 function calculateAverageResponseTime(recentAttempts, currentResponseTime, existingAvgTime) {
     if (recentAttempts.length === 0) {
