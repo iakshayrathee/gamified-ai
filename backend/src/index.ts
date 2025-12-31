@@ -25,14 +25,17 @@ const allowedOrigins = [
     'http://localhost:3000',
     'https://gamified-ai.vercel.app',
     process.env.FRONTEND_URL
-].filter(Boolean);
+].filter(Boolean).map(origin => origin?.replace(/\/$/, '')); // Remove trailing slashes
 
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        // Normalize origin by removing trailing slash
+        const normalizedOrigin = origin.replace(/\/$/, '');
+
+        if (allowedOrigins.indexOf(normalizedOrigin) !== -1) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
