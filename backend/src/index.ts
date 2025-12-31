@@ -2,7 +2,6 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import getPrismaClient from './lib/db';
-const prisma = getPrismaClient();
 import dotenv from 'dotenv';
 import { uploadAsset, getAssetUrl, deleteAsset, listAssets, validateAssetType } from './lib/s3-service';
 import { uploadSingle, uploadMultiple, uploadDocument } from './lib/upload-middleware';
@@ -15,6 +14,9 @@ import quizReviewService from './lib/quiz-review-service';
 import teacherService from './lib/teacher-service';
 import { getAdminStats, createDomain } from './lib/admin-service';
 dotenv.config();
+
+// Initialize Prisma Client after environment variables are loaded
+const prisma = getPrismaClient();
 
 const app = express();
 const port = process.env.PORT || 5000;
