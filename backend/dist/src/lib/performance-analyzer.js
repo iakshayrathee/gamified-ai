@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PerformanceAnalyzer = void 0;
 const db_1 = __importDefault(require("./db"));
+const prisma = (0, db_1.default)();
 const openai_service_1 = __importDefault(require("./openai-service"));
 const ai = openai_service_1.default;
 /**
@@ -18,7 +19,7 @@ class PerformanceAnalyzer {
     async generateReport(childId, startDate, endDate) {
         try {
             // 1. Fetch all attempts in date range
-            const attempts = await db_1.default.attempt.findMany({
+            const attempts = await prisma.attempt.findMany({
                 where: {
                     childId,
                     createdAt: {
@@ -48,7 +49,7 @@ class PerformanceAnalyzer {
             // 4. Use AI to analyze patterns and generate insights
             const aiInsights = await this.analyzeWithAI(attempts, metrics, domainStats);
             // 5. Save report to database
-            const report = await db_1.default.performanceReport.create({
+            const report = await prisma.performanceReport.create({
                 data: {
                     childId,
                     reportPeriodStart: startDate,
@@ -326,7 +327,7 @@ Focus on:
      * Get all reports for a child
      */
     async getChildReports(childId, limit = 10) {
-        return await db_1.default.performanceReport.findMany({
+        return await prisma.performanceReport.findMany({
             where: { childId },
             include: {
                 domainPerformance: {

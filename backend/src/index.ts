@@ -1,7 +1,8 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import prisma from './lib/db';
+import getPrismaClient from './lib/db';
+const prisma = getPrismaClient();
 import dotenv from 'dotenv';
 import { uploadAsset, getAssetUrl, deleteAsset, listAssets, validateAssetType } from './lib/s3-service';
 import { uploadSingle, uploadMultiple, uploadDocument } from './lib/upload-middleware';

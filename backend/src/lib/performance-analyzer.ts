@@ -1,4 +1,5 @@
-import prisma from './db';
+import getPrismaClient from './db';
+const prisma = getPrismaClient();
 import OpenAIService from './openai-service';
 
 const ai = OpenAIService;

@@ -40,6 +40,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const db_1 = __importDefault(require("./lib/db"));
+const prisma = (0, db_1.default)();
 const dotenv_1 = __importDefault(require("dotenv"));
 const s3_service_1 = require("./lib/s3-service");
 const upload_middleware_1 = require("./lib/upload-middleware");
@@ -112,7 +113,7 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
         // Find user by email
-        const user = await db_1.default.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { email }
         });
         if (!user || !user.passwordHash) {
@@ -160,7 +161,7 @@ app.post('/api/auth/logout', (req, res) => {
 // Get current user
 app.get('/api/auth/me', auth_middleware_1.authenticate, async (req, res) => {
     try {
-        const user = await db_1.default.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { id: req.user.userId },
             select: {
                 id: true,
@@ -204,7 +205,7 @@ app.post('/api/auth/refresh', auth_middleware_1.authenticate, async (req, res) =
 // Get all skills
 app.get('/api/skills', async (req, res) => {
     try {
-        const skills = await db_1.default.microSkill.findMany({
+        const skills = await prisma.microSkill.findMany({
             include: {
                 domain: true
             },
@@ -224,7 +225,7 @@ app.get('/api/skills/:skillId/questions', async (req, res) => {
     try {
         const { skillId } = req.params;
         const difficulty = req.query.difficulty ? parseInt(req.query.difficulty) : undefined;
-        const questions = await db_1.default.question.findMany({
+        const questions = await prisma.question.findMany({
             where: {
                 microSkillId: skillId,
                 ...(difficulty && { difficultyLevel: difficulty })
@@ -257,7 +258,7 @@ app.get('/api/skills/:skillId/questions', async (req, res) => {
 app.get('/api/child/:childId/progress', async (req, res) => {
     try {
         const { childId } = req.params;
-        const skillProgress = await db_1.default.skillProgress.findMany({
+        const skillProgress = await prisma.skillProgress.findMany({
             where: { childId },
             include: {
                 microSkill: {
@@ -267,7 +268,7 @@ app.get('/api/child/:childId/progress', async (req, res) => {
                 }
             }
         });
-        const allSkills = await db_1.default.microSkill.findMany({
+        const allSkills = await prisma.microSkill.findMany({
             include: {
                 domain: true
             }
@@ -275,12 +276,12 @@ app.get('/api/child/:childId/progress', async (req, res) => {
         const totalSkills = allSkills.length;
         const masteredSkills = skillProgress.filter(sp => sp.masteryStatus === 'MASTERED').length;
         const overallProgress = totalSkills > 0 ? Math.round((masteredSkills / totalSkills) * 100) : 0;
-        const achievements = await db_1.default.achievement.findMany({
+        const achievements = await prisma.achievement.findMany({
             where: { childId }
         });
         const totalStars = achievements.reduce((sum, a) => sum + a.starsEarned, 0);
         const totalCoins = achievements.reduce((sum, a) => sum + a.coinsEarned, 0);
-        const sessions = await db_1.default.session.findMany({
+        const sessions = await prisma.session.findMany({
             where: { childId },
             orderBy: { startedAt: 'desc' },
             take: 30
@@ -304,7 +305,7 @@ app.get('/api/child/:childId/progress', async (req, res) => {
 app.get('/api/teacher/:teacherId/students', async (req, res) => {
     try {
         const { teacherId } = req.params;
-        const children = await db_1.default.user.findMany({
+        const children = await prisma.user.findMany({
             where: {
                 teacherId,
                 role: 'CHILD'
@@ -315,10 +316,10 @@ app.get('/api/teacher/:teacherId/students', async (req, res) => {
             }
         });
         const studentsWithProgress = await Promise.all(children.map(async (child) => {
-            const skillProgress = await db_1.default.skillProgress.findMany({
+            const skillProgress = await prisma.skillProgress.findMany({
                 where: { childId: child.id }
             });
-            const totalSkills = await db_1.default.microSkill.count();
+            const totalSkills = await prisma.microSkill.count();
             const masteredSkills = skillProgress.filter(sp => sp.masteryStatus === 'MASTERED').length;
             const masteryPercentage = totalSkills > 0 ? Math.round((masteredSkills / totalSkills) * 100) : 0;
             const avgAccuracy = skillProgress.length > 0
@@ -379,7 +380,7 @@ app.post('/api/attempts', async (req, res) => {
             }
         }
         // Create attempt with new fields
-        const attempt = await db_1.default.attempt.create({
+        const attempt = await prisma.attempt.create({
             data: {
                 childId,
                 questionId,
@@ -407,7 +408,7 @@ app.post('/api/attempts', async (req, res) => {
         }
         const coins = Math.round(stars);
         // Get recent attempts for adaptive analysis
-        const recentAttempts = await db_1.default.attempt.findMany({
+        const recentAttempts = await prisma.attempt.findMany({
             where: {
                 childId,
                 microSkillId,
@@ -437,7 +438,7 @@ app.post('/api/attempts', async (req, res) => {
         difficultyLevelAtAttempt);
         console.log(`[ADAPTIVE] Recommended next difficulty: ${nextQuestionDifficulty}`);
         // Update skill progress with recalculated accuracy and AI insights
-        const existingProgress = await db_1.default.skillProgress.findUnique({
+        const existingProgress = await prisma.skillProgress.findUnique({
             where: {
                 childId_microSkillId: {
                     childId,
@@ -460,7 +461,7 @@ app.post('/api/attempts', async (req, res) => {
             behavioralTip = tip.message;
         }
         // Update skill progress with recalculated accuracy and AI insights
-        await db_1.default.skillProgress.upsert({
+        await prisma.skillProgress.upsert({
             where: {
                 childId_microSkillId: {
                     childId,
@@ -606,7 +607,7 @@ app.delete('/api/assets/:key', async (req, res) => {
 // Get all domains
 app.get('/api/domains', async (req, res) => {
     try {
-        const domains = await db_1.default.skillDomain.findMany({
+        const domains = await prisma.skillDomain.findMany({
             include: {
                 microSkills: {
                     select: {
@@ -663,18 +664,18 @@ app.post('/api/skills', async (req, res) => {
         // Check if skill with same code already exists
         let finalCode = code;
         let counter = 1;
-        let existingSkill = await db_1.default.microSkill.findUnique({
+        let existingSkill = await prisma.microSkill.findUnique({
             where: { code: finalCode }
         });
         // If code exists, append a number until we find a unique one
         while (existingSkill) {
             finalCode = `${code}_${counter}`;
             counter++;
-            existingSkill = await db_1.default.microSkill.findUnique({
+            existingSkill = await prisma.microSkill.findUnique({
                 where: { code: finalCode }
             });
         }
-        const skill = await db_1.default.microSkill.create({
+        const skill = await prisma.microSkill.create({
             data: {
                 name,
                 code: finalCode,
@@ -696,7 +697,7 @@ app.post('/api/skills', async (req, res) => {
 // Get all skills
 app.get('/api/skills', async (req, res) => {
     try {
-        const skills = await db_1.default.microSkill.findMany({
+        const skills = await prisma.microSkill.findMany({
             include: {
                 domain: true
             },
@@ -718,7 +719,7 @@ app.get('/api/skills', async (req, res) => {
 app.post('/api/sessions/start', async (req, res) => {
     try {
         const { childId } = req.body;
-        const session = await db_1.default.session.create({
+        const session = await prisma.session.create({
             data: {
                 childId,
                 startedAt: new Date(),
@@ -736,7 +737,7 @@ app.post('/api/sessions/start', async (req, res) => {
 app.post('/api/sessions/:sessionId/end', async (req, res) => {
     try {
         const { sessionId } = req.params;
-        const session = await db_1.default.session.findUnique({
+        const session = await prisma.session.findUnique({
             where: { id: sessionId },
             include: { attempts: true },
         });
@@ -773,7 +774,7 @@ app.post('/api/sessions/:sessionId/end', async (req, res) => {
         }
         // Create achievement record
         if (session.attempts.length > 0) {
-            await db_1.default.achievement.create({
+            await prisma.achievement.create({
                 data: {
                     childId: session.childId,
                     badgeType,
@@ -782,7 +783,7 @@ app.post('/api/sessions/:sessionId/end', async (req, res) => {
                 },
             });
         }
-        const updatedSession = await db_1.default.session.update({
+        const updatedSession = await prisma.session.update({
             where: { id: sessionId },
             data: {
                 endedAt: new Date(),
@@ -812,7 +813,7 @@ app.post('/api/admin/questions/bulk', express_1.default.json({ limit: '10mb' }),
         for (let i = 0; i < questions.length; i++) {
             try {
                 const q = questions[i];
-                const question = await db_1.default.question.create({
+                const question = await prisma.question.create({
                     data: {
                         microSkillId: q.microSkillId,
                         difficultyLevel: q.difficultyLevel,
@@ -851,7 +852,7 @@ app.post('/api/child/:childId/calculate-mastery', async (req, res) => {
         const { childId } = req.params;
         const { microSkillId } = req.body;
         // Get last 10 attempts for this skill
-        const recentAttempts = await db_1.default.attempt.findMany({
+        const recentAttempts = await prisma.attempt.findMany({
             where: {
                 childId,
                 microSkillId,
@@ -874,7 +875,7 @@ app.post('/api/child/:childId/calculate-mastery', async (req, res) => {
         // Check mastery criteria
         // Relaxed time threshold from 4s to 15s for realistic gameplay
         const isMastered = accuracy >= 80 && avgTime <= 15 && confusionRate < 20;
-        const skillProgress = await db_1.default.skillProgress.update({
+        const skillProgress = await prisma.skillProgress.update({
             where: {
                 childId_microSkillId: {
                     childId,
@@ -893,7 +894,7 @@ app.post('/api/child/:childId/calculate-mastery', async (req, res) => {
             // Calculate bonus stars and coins for mastery
             const masteryStars = 5; // Bonus stars for mastering a skill
             const masteryCoins = 10; // Bonus coins for mastering a skill
-            await db_1.default.achievement.create({
+            await prisma.achievement.create({
                 data: {
                     childId,
                     badgeType: 'DOMAIN_MASTER',
@@ -1100,7 +1101,7 @@ app.patch('/api/admin/questions/:questionId/metadata', async (req, res) => {
             updateData.difficultyLevel = difficultyLevel;
         if (gameTemplate !== undefined)
             updateData.gameTemplate = gameTemplate;
-        const question = await db_1.default.extractedQuestion.update({
+        const question = await prisma.extractedQuestion.update({
             where: { id: questionId },
             data: updateData
         });
@@ -1127,7 +1128,7 @@ app.patch('/api/admin/extracted-questions/:questionId', async (req, res) => {
             updateData.explanation = explanation;
         if (difficultyLevel !== undefined)
             updateData.difficultyLevel = difficultyLevel;
-        const question = await db_1.default.extractedQuestion.update({
+        const question = await prisma.extractedQuestion.update({
             where: { id: questionId },
             data: updateData
         });
@@ -1150,7 +1151,7 @@ app.patch('/api/admin/questions/bulk-metadata', async (req, res) => {
             updateData.difficultyLevel = difficultyLevel;
         if (gameTemplate !== undefined)
             updateData.gameTemplate = gameTemplate;
-        const result = await db_1.default.extractedQuestion.updateMany({
+        const result = await prisma.extractedQuestion.updateMany({
             where: { id: { in: questionIds } },
             data: updateData
         });
@@ -1216,7 +1217,7 @@ app.get('/api/admin/users', async (req, res) => {
             where.role = role;
         }
         const [users, total] = await Promise.all([
-            db_1.default.user.findMany({
+            prisma.user.findMany({
                 where,
                 skip: (page - 1) * pageSize,
                 take: pageSize,
@@ -1229,7 +1230,7 @@ app.get('/api/admin/users', async (req, res) => {
                 },
                 orderBy: { createdAt: 'desc' }
             }),
-            db_1.default.user.count({ where })
+            prisma.user.count({ where })
         ]);
         res.json({ users, total });
     }
@@ -1247,7 +1248,7 @@ app.post('/api/admin/users', async (req, res) => {
         // Hash password
         const bcrypt = require('bcrypt');
         const passwordHash = await bcrypt.hash(password, 10);
-        const user = await db_1.default.user.create({
+        const user = await prisma.user.create({
             data: {
                 name,
                 email,
@@ -1276,7 +1277,7 @@ app.patch('/api/admin/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, role } = req.body;
-        const user = await db_1.default.user.update({
+        const user = await prisma.user.update({
             where: { id },
             data: { name, role },
             select: {
@@ -1297,7 +1298,7 @@ app.patch('/api/admin/users/:id', async (req, res) => {
 app.delete('/api/admin/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        await db_1.default.user.delete({
+        await prisma.user.delete({
             where: { id }
         });
         res.json({ message: 'User deleted successfully' });
@@ -1312,7 +1313,7 @@ app.patch('/api/domains/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, description } = req.body;
-        const domain = await db_1.default.skillDomain.update({
+        const domain = await prisma.skillDomain.update({
             where: { id },
             data: { name, description },
             include: {
@@ -1336,7 +1337,7 @@ app.delete('/api/domains/:id', async (req, res) => {
     try {
         const { id } = req.params;
         // Check for dependent skills
-        const skillCount = await db_1.default.microSkill.count({
+        const skillCount = await prisma.microSkill.count({
             where: { domainId: id }
         });
         if (skillCount > 0) {
@@ -1344,7 +1345,7 @@ app.delete('/api/domains/:id', async (req, res) => {
                 error: `Cannot delete domain. ${skillCount} skills are associated with it.`
             });
         }
-        await db_1.default.skillDomain.delete({
+        await prisma.skillDomain.delete({
             where: { id }
         });
         res.json({ message: 'Domain deleted successfully' });
@@ -1359,7 +1360,7 @@ app.patch('/api/skills/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, domainId, gameTemplate } = req.body;
-        const skill = await db_1.default.microSkill.update({
+        const skill = await prisma.microSkill.update({
             where: { id },
             data: { name, domainId, gameTemplate },
             include: {
@@ -1377,7 +1378,7 @@ app.delete('/api/skills/:id', async (req, res) => {
     try {
         const { id } = req.params;
         // Check for dependent questions
-        const questionCount = await db_1.default.question.count({
+        const questionCount = await prisma.question.count({
             where: { microSkillId: id }
         });
         if (questionCount > 0) {
@@ -1385,7 +1386,7 @@ app.delete('/api/skills/:id', async (req, res) => {
                 error: `Cannot delete skill. ${questionCount} questions are associated with it.`
             });
         }
-        await db_1.default.microSkill.delete({
+        await prisma.microSkill.delete({
             where: { id }
         });
         res.json({ message: 'Skill deleted successfully' });
@@ -1414,7 +1415,7 @@ app.get('/api/admin/questions', async (req, res) => {
             where.difficultyLevel = difficulty;
         }
         const [questions, total] = await Promise.all([
-            db_1.default.question.findMany({
+            prisma.question.findMany({
                 where,
                 skip: (page - 1) * pageSize,
                 take: pageSize,
@@ -1427,7 +1428,7 @@ app.get('/api/admin/questions', async (req, res) => {
                 },
                 orderBy: { createdAt: 'desc' }
             }),
-            db_1.default.question.count({ where })
+            prisma.question.count({ where })
         ]);
         res.json({ questions, total });
     }
@@ -1453,14 +1454,14 @@ app.post('/api/admin/questions', async (req, res) => {
             });
         }
         // Verify skill exists
-        const skill = await db_1.default.microSkill.findUnique({
+        const skill = await prisma.microSkill.findUnique({
             where: { id: microSkillId }
         });
         if (!skill) {
             return res.status(400).json({ error: 'Invalid microSkillId' });
         }
         // Create question
-        const question = await db_1.default.question.create({
+        const question = await prisma.question.create({
             data: {
                 microSkillId,
                 difficultyLevel,
@@ -1501,7 +1502,7 @@ app.patch('/api/admin/questions/:id', async (req, res) => {
             updateData.correctAnswer = correctAnswer;
         if (distractors !== undefined)
             updateData.distractors = distractors;
-        const question = await db_1.default.question.update({
+        const question = await prisma.question.update({
             where: { id },
             data: updateData,
             include: {
@@ -1541,7 +1542,7 @@ app.get('/api/quiz-review/:sessionId/:childId', async (req, res) => {
 app.delete('/api/admin/questions/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        await db_1.default.question.delete({
+        await prisma.question.delete({
             where: { id }
         });
         res.json({ message: 'Question deleted successfully' });
@@ -1615,6 +1616,6 @@ app.listen(port, () => {
 });
 // Graceful shutdown
 process.on('SIGINT', async () => {
-    await db_1.default.$disconnect();
+    await prisma.$disconnect();
     process.exit(0);
 });
