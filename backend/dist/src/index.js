@@ -38,7 +38,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const db_1 = __importDefault(require("./lib/db"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const s3_service_1 = require("./lib/s3-service");
@@ -62,7 +61,7 @@ app.use((0, cors_1.default)({
     credentials: true
 }));
 app.use(express_1.default.json());
-app.use(cookie_parser_1.default);
+app.use(require('cookie-parser')());
 // Helper functions for skill progress calculations
 function calculateAverageResponseTime(recentAttempts, currentResponseTime, existingAvgTime) {
     if (recentAttempts.length === 0) {
@@ -1609,14 +1608,38 @@ app.get('/api/teacher/student/:childId/reports', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch reports' });
     }
 });
-// Start server
-app.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Backend server running on http://0.0.0.0:${port}`);
-    console.log(`📊 Health check: http://0.0.0.0:${port}/health`);
-    console.log(`🤖 OpenAI integration enabled`);
-});
+// Test database connection before starting server
+async function startServer() {
+    try {
+        // Test Prisma connection
+        await prisma.$connect();
+        console.log('✅ Database connected successfully');
+        // Start server
+        const server = app.listen(port, '0.0.0.0', () => {
+            console.log(`🚀 Backend server running on http://0.0.0.0:${port}`);
+            console.log(`📊 Health check: http://0.0.0.0:${port}/health`);
+            console.log(`🤖 OpenAI integration enabled`);
+        });
+        server.on('error', (error) => {
+            console.error('❌ Server error:', error);
+            process.exit(1);
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+}
+// Start the server
+startServer();
 // Graceful shutdown
 process.on('SIGINT', async () => {
+    console.log('Shutting down gracefully...');
+    await prisma.$disconnect();
+    process.exit(0);
+});
+process.on('SIGTERM', async () => {
+    console.log('Shutting down gracefully...');
     await prisma.$disconnect();
     process.exit(0);
 });

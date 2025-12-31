@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import cookieParser from 'cookie-parser';
 import getPrismaClient from './lib/db';
 import dotenv from 'dotenv';
 import { uploadAsset, getAssetUrl, deleteAsset, listAssets, validateAssetType } from './lib/s3-service';
@@ -27,7 +26,7 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
-app.use(cookieParser);
+app.use(require('cookie-parser')());
 
 // Helper functions for skill progress calculations
 function calculateAverageResponseTime(
@@ -1801,15 +1800,43 @@ app.get('/api/teacher/student/:childId/reports', async (req: Request, res: Respo
     }
 });
 
-// Start server
-app.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Backend server running on http://0.0.0.0:${port}`);
-    console.log(`📊 Health check: http://0.0.0.0:${port}/health`);
-    console.log(`🤖 OpenAI integration enabled`);
-});
+// Test database connection before starting server
+async function startServer() {
+    try {
+        // Test Prisma connection
+        await prisma.$connect();
+        console.log('✅ Database connected successfully');
+
+        // Start server
+        const server = app.listen(port, '0.0.0.0', () => {
+            console.log(`🚀 Backend server running on http://0.0.0.0:${port}`);
+            console.log(`📊 Health check: http://0.0.0.0:${port}/health`);
+            console.log(`🤖 OpenAI integration enabled`);
+        });
+
+        server.on('error', (error: any) => {
+            console.error('❌ Server error:', error);
+            process.exit(1);
+        });
+
+    } catch (error) {
+        console.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+}
+
+// Start the server
+startServer();
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
+    console.log('Shutting down gracefully...');
+    await prisma.$disconnect();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('Shutting down gracefully...');
     await prisma.$disconnect();
     process.exit(0);
 });
