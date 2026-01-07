@@ -161,11 +161,7 @@ export class DocumentProcessor {
      * Extract questions using AI
      */
     private async extractQuestions(text: string): Promise<ExtractedQuestionData[]> {
-        console.log('📄 Extracted text length:', text.length);
-        console.log('📄 First 500 characters:', text.substring(0, 500));
-
         if (!text || text.trim().length < 10) {
-            console.warn('⚠️ Text too short or empty, skipping AI extraction');
             return [];
         }
 

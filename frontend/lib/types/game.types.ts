@@ -7,18 +7,16 @@ export interface Question {
     correctAnswer: string;
     distractors: string[];
     hasConfusingDistractors: boolean;
-    assetUrls: {
-        options?: string[];
-        [key: string]: any;
-    };
+    assetUrls: any;
     gameTemplate?: string;
 }
 
 export interface BaseGameProps {
     question: Question;
-    onAnswer: (isCorrect: boolean, responseTime: number, hintUsed: boolean) => void;
+    onAnswer: (isCorrect: boolean, responseTime: number, hintUsed: boolean, userResponse?: string) => void;
     difficultyLevel: 1 | 2 | 3;
     showHint: boolean;
+    isRulesModalOpen?: boolean;
 }
 
 export interface GameResult {

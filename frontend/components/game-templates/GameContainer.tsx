@@ -16,7 +16,7 @@ export default function GameContainer({
         <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="relative w-full max-w-6xl mx-auto"
+            className="relative w-full max-w-7xl mx-auto flex flex-col items-center justify-start min-h-[500px] max-h-[calc(100vh-150px)] overflow-y-auto overflow-x-hidden custom-scrollbar bg-white rounded-3xl shadow-xl"
         >
             {/* Success celebration overlay */}
             <AnimatePresence>
@@ -62,8 +62,8 @@ export default function GameContainer({
                 )}
             </AnimatePresence>
 
-            {/* Game content - TRANSPARENT background, wider container */}
-            <div className="bg-transparent rounded-3xl p-8">
+            {/* Game content - TRANSPARENT background, wider container, NO scrollbars by default */}
+            <div className="bg-transparent rounded-3xl p-4 md:p-8 flex flex-col items-center">
                 {children}
             </div>
         </motion.div>

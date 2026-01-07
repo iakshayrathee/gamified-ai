@@ -63,6 +63,7 @@ export interface SkillProgress {
     correctAttempts: number;
     lastAttemptedAt: string | null;
     masteredAt: string | null;
+    aiInsights?: string | any; // JSON field for tier classification and other AI insights
     microSkill: MicroSkill;
 }
 

@@ -13,14 +13,19 @@ interface SequenceItem {
     correctPosition: number;
 }
 
-interface SequencingGameProps {
-    items: SequenceItem[];
-    instruction: string;
-    onComplete: (correct: boolean, timeSeconds: number) => void;
-    onHintRequest?: () => void;
-}
+import { BaseGameProps } from '@/lib/types/game.types';
 
-export default function SequencingGame({ items, instruction, onComplete, onHintRequest }: SequencingGameProps) {
+export default function SequencingGame({
+    question,
+    onAnswer,
+    difficultyLevel,
+    showHint: shouldShowHint,
+    isRulesModalOpen,
+}: BaseGameProps) {
+    const items: SequenceItem[] = question.assetUrls?.items || [];
+    const instruction: string = question.promptText || '';
+    const onComplete = (correct: boolean, timeSeconds: number) => onAnswer(correct, timeSeconds, false);
+
     // Add null/undefined checks with default values
     const safeItems = items || [];
     const [orderedItems, setOrderedItems] = useState<SequenceItem[]>([...safeItems].sort(() => Math.random() - 0.5));
@@ -75,14 +80,17 @@ export default function SequencingGame({ items, instruction, onComplete, onHintR
 
         setFeedback(isCorrect ? 'correct' : 'incorrect');
 
-        setTimeout(() => {
+        if (isCorrect) {
             onComplete(isCorrect, timeSeconds);
-        }, 2000);
+        } else {
+            setTimeout(() => {
+                onComplete(isCorrect, timeSeconds);
+            }, 2000);
+        }
     };
 
     const handleHint = () => {
         setShowHint(true);
-        onHintRequest?.();
         setTimeout(() => setShowHint(false), 3000);
     };
 

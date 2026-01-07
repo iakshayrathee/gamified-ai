@@ -19,6 +19,8 @@ import PuzzleJoinGame from '@/components/game-templates/PuzzleJoinGame';
 import FindTheWordGame from '@/components/game-templates/FindTheWordGame';
 import SequencingGame from '@/components/game-templates/SequencingGame';
 import OddOneOutGame from '@/components/game-templates/OddOneOutGame';
+import FlashcardRecognitionGame from '@/components/game-templates/FlashcardRecognitionGame';
+import RecallGame from '@/components/game-templates/RecallGame';
 import QuizResults from '@/components/quiz/QuizResults';
 import QuizTimer from '@/components/quiz/QuizTimer';
 import QuizRulesModal from '@/components/quiz/QuizRulesModal';
@@ -177,7 +179,12 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
             console.log('Initial batch loaded: 5 questions at difficulty 1');
 
             // Start session
-            console.log('Starting session for child:', childId);
+            // console.log('🎮 Starting quiz session:', {
+            //     skillId,
+            //     skill: skill?.name,
+            //     totalQuestions: questions.length,
+            //     hasQuestions: questions.length > 0
+            // });
             const newSession = await ApiClient.startSession(childId, skillId);
             setSession(newSession);
             console.log('Session started:', newSession.id);
@@ -236,6 +243,19 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
         setLastQuestionTime(timeTaken);
         setQuestionTimings([...questionTimings, timeTaken]);
 
+        // Skip feedback modal for Recognition and Meaning skills (RF.ALL.1, RF.ALL.2) - continuous flow
+        const isContinuousFlowSkill = skill.code === 'RF.ALL.1' || skill.code === 'RF.ALL.2';
+
+        if (!isContinuousFlowSkill) {
+            // Show answer feedback IMMEDIATELY for snappy feel (only for non-Recognition skills)
+            setFeedbackData({
+                isCorrect,
+                starsEarned: isCorrect ? 1.5 : 0, // Optimistic guess, updated later
+                timeTaken
+            });
+            setShowAnswerFeedback(true);
+        }
+
         try {
             // Log attempt to backend
             const result = await ApiClient.logAttempt({
@@ -252,12 +272,18 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 difficultyLevelAtAttempt: difficulty,
             });
 
-            // Update stats
-            setTotalStars(prev => prev + result.stars);
-            setTotalCoins(prev => prev + result.coins);
+            // Update stats with real data from backend (skip for continuous flow skills)
+            if (!isContinuousFlowSkill) {
+                setTotalStars(prev => prev + result.stars);
+                setTotalCoins(prev => prev + result.coins);
+            }
             setTotalAttempts(prev => prev + 1);
             if (isCorrect) {
                 setCorrectCount(prev => prev + 1);
+                // Update feedback with actual stars earned if different
+                if (!isContinuousFlowSkill) {
+                    setFeedbackData(prev => ({ ...prev, starsEarned: result.stars }));
+                }
             }
 
             // Update average response time
@@ -268,13 +294,7 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 return newTimings;
             });
 
-            // Show answer feedback
-            setFeedbackData({
-                isCorrect,
-                starsEarned: result.stars,
-                timeTaken
-            });
-            setShowAnswerFeedback(true);
+            // result is already used to update state, so we just proceed to the timeout
 
             // Hide feedback after 2 seconds and move to next question
             setTimeout(async () => {
@@ -529,16 +549,71 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
 
     const currentQuestion = questions[currentQuestionIndex];
 
+    // Special rendering for Recognition and Meaning skills - Time-based, no quiz mechanics
+    if (skill?.code === 'RF.ALL.1') {
+        return (
+            <div className="h-screen w-screen overflow-hidden">
+                {/* Full screen flashcard game - no rules modal */}
+                {currentQuestion && (
+                    <FlashcardRecognitionGame
+                        question={currentQuestion}
+                        onAnswer={handleAnswer}
+                        difficultyLevel={difficulty}
+                        showHint={false}
+                        isRulesModalOpen={false}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    // Meaning quiz - continuous flow with picture matching
+    if (skill?.code === 'RF.ALL.2') {
+        return (
+            <div className="h-screen w-screen overflow-hidden">
+                {/* Full screen meaning game - no rules modal */}
+                {currentQuestion && (
+                    <PictureToWordGame
+                        question={currentQuestion}
+                        onAnswer={handleAnswer}
+                        difficultyLevel={difficulty}
+                        showHint={false}
+                        isRulesModalOpen={false}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    // Recall quiz - continuous flow with auditory-to-visual mapping
+    if (skill?.code === 'RF.ALL.3') {
+        return (
+            <div className="h-screen w-screen overflow-hidden">
+                {/* Full screen recall game - no rules modal */}
+                {currentQuestion && (
+                    <RecallGame
+                        question={currentQuestion}
+                        onAnswer={handleAnswer}
+                        difficultyLevel={difficulty}
+                        showHint={false}
+                        isRulesModalOpen={false}
+                        gameMode="tap"
+                    />
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className="h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 overflow-hidden relative flex">
-            {/* Floating Background Icons */}
-            {['📚', '✏️', '🎨', '🎯', '⭐', '🌟', '✨', '🎪'].map((icon, i) => (
+            {/* Floating Background Icons - Reduced for cleaner look */}
+            {['📚', '⭐', '🎯', '✨'].map((icon, i) => (
                 <motion.div
                     key={`float-${i}`}
                     initial={{
                         y: typeof window !== 'undefined' ? Math.random() * window.innerHeight : 0,
                         x: typeof window !== 'undefined' ? Math.random() * window.innerWidth : 0,
-                        opacity: 0.15
+                        opacity: 0.1
                     }}
                     animate={{
                         y: [null, Math.random() * 100 - 50],
@@ -546,12 +621,12 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                         rotate: [0, 360]
                     }}
                     transition={{
-                        duration: 20 + Math.random() * 10,
+                        duration: 25 + Math.random() * 10,
                         repeat: Infinity,
                         repeatType: "reverse",
                         ease: "easeInOut"
                     }}
-                    className="absolute text-6xl pointer-events-none"
+                    className="absolute text-5xl pointer-events-none"
                     style={{
                         top: `${Math.random() * 80}%`,
                         left: `${Math.random() * 80}%`
@@ -576,166 +651,89 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 timeTaken={feedbackData.timeTaken}
             />
 
-            {/* Curtain Drop Animation for Correct Answers */}
-            <AnimatePresence>
-                {showAnswerFeedback && feedbackData.isCorrect && (
-                    <>
-                        {/* Left Curtain */}
-                        <motion.div
-                            initial={{ y: "-100%" }}
-                            animate={{ y: 0 }}
-                            exit={{ y: "-100%" }}
-                            transition={{ duration: 0.6, ease: "easeOut" }}
-                            className="fixed left-0 top-0 w-1/4 h-screen bg-gradient-to-r from-purple-600 to-purple-500 z-40 shadow-2xl"
-                            style={{
-                                backgroundImage: "repeating-linear-gradient(90deg, rgba(255,255,255,0.1) 0px, transparent 2px, transparent 10px, rgba(255,255,255,0.1) 12px)"
-                            }}
-                        />
-
-                        {/* Right Curtain */}
-                        <motion.div
-                            initial={{ y: "-100%" }}
-                            animate={{ y: 0 }}
-                            exit={{ y: "-100%" }}
-                            transition={{ duration: 0.6, ease: "easeOut" }}
-                            className="fixed right-0 top-0 w-1/4 h-screen bg-gradient-to-l from-pink-600 to-pink-500 z-40 shadow-2xl"
-                            style={{
-                                backgroundImage: "repeating-linear-gradient(90deg, rgba(255,255,255,0.1) 0px, transparent 2px, transparent 10px, rgba(255,255,255,0.1) 12px)"
-                            }}
-                        />
-
-                        {/* Celebration Emojis Falling */}
-                        {['⭐', '🎉', '✨', '🌟', '💫', '🎊'].map((emoji, i) => (
-                            <motion.div
-                                key={`curtain-emoji-${i}`}
-                                initial={{ y: -100, x: `${10 + i * 15}%`, opacity: 0, scale: 0 }}
-                                animate={{
-                                    y: typeof window !== 'undefined' ? window.innerHeight + 100 : 1000,
-                                    opacity: [0, 1, 1, 0],
-                                    scale: [0, 1.5, 1, 0.5],
-                                    rotate: [0, 360]
-                                }}
-                                transition={{
-                                    duration: 1.5,
-                                    delay: 0.3 + i * 0.1,
-                                    ease: "easeOut"
-                                }}
-                                className="fixed text-6xl z-50 pointer-events-none"
-                            >
-                                {emoji}
-                            </motion.div>
-                        ))}
-                    </>
-                )}
-            </AnimatePresence>
-
-            {/* LEFT SIDEBAR - Stats Panel */}
+            {/* LEFT SIDEBAR - Stats Panel - Compact and Professional */}
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3 }}
-                className="w-72 flex-shrink-0 bg-white/30 backdrop-blur-lg border-r-2 border-white/40 p-4 flex flex-col gap-3 relative z-10 h-screen overflow-hidden"
+                className="w-64 flex-shrink-0 bg-white/40 backdrop-blur-lg border-r-2 border-white/50 p-3 flex flex-col gap-2.5 relative z-10 h-screen overflow-hidden"
             >
-                {/* Back Button */}
+                {/* Back Button - Simplified */}
                 <Link href={`/child/domain/${skill?.domainId}`}>
                     <motion.button
-                        whileHover={{
-                            scale: 1.05,
-                            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3)"
-                        }}
-                        whileTap={{ scale: 0.95 }}
-                        className="w-full bg-gradient-to-r from-purple-500 via-purple-600 to-pink-500 text-white px-5 py-3.5 rounded-2xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 text-base relative overflow-hidden"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2.5 rounded-xl font-semibold shadow-md transition-all flex items-center justify-center gap-2 text-sm"
                     >
-                        <motion.div
-                            className="absolute inset-0 bg-gradient-to-r from-pink-500 via-purple-600 to-purple-500 opacity-50"
-                            animate={{ x: ["-100%", "100%"] }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                        />
-                        <ArrowLeft className="w-5 h-5 relative z-10" />
-                        <span className="relative z-10">Back to Skills</span>
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Back to Skills</span>
                     </motion.button>
                 </Link>
 
-                {/* Skill Info */}
-                <div className="bg-white/40 backdrop-blur-sm rounded-2xl p-4 border-2 border-white/50">
-                    <div className="flex items-center gap-3">
-                        <span className="text-4xl">🎮</span>
+                {/* Skill Info - Compact */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl p-3 border border-white/60">
+                    <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎮</span>
                         <div className="flex-1">
-                            <h2 className="text-lg font-bold text-purple-800 leading-tight">{skill?.name}</h2>
-                            <p className="text-sm text-gray-600 font-semibold">Level {difficulty}</p>
+                            <h2 className="text-base font-bold text-purple-800 leading-tight">{skill?.name}</h2>
+                            <p className="text-xs text-gray-600 font-medium">Level {difficulty}</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Question Progress */}
-                <div className="bg-white/40 backdrop-blur-sm rounded-2xl p-4 border-2 border-white/50">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Target className="w-5 h-5 text-purple-600" />
-                        <span className="font-bold text-purple-700 text-base">Progress</span>
+                {/* Question Progress - Compact */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl p-3 border border-white/60">
+                    <div className="flex items-center gap-1.5 mb-2">
+                        <Target className="w-4 h-4 text-purple-600" />
+                        <span className="font-semibold text-purple-700 text-sm">Progress</span>
                     </div>
-                    <div className="text-center">
-                        <div className="text-3xl font-bold text-purple-800">{currentQuestionIndex + 1}</div>
-                        <div className="text-sm text-gray-600 font-medium">of {questions.length}</div>
+                    <div className="text-center mb-2">
+                        <div className="text-2xl font-bold text-purple-800">{currentQuestionIndex + 1}</div>
+                        <div className="text-xs text-gray-600 font-medium">of {questions.length}</div>
                     </div>
                     {/* Progress Bar */}
-                    <div className="mt-3 relative h-3 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                    <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{
                                 width: `${(totalAttempts / questions.length) * 100}%`
                             }}
                             transition={{ duration: 0.5, ease: "easeOut" }}
-                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 rounded-full"
+                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
                         />
                     </div>
-                    <div className="text-sm text-center text-purple-600 font-semibold mt-2">
+                    <div className="text-xs text-center text-purple-600 font-medium mt-1.5">
                         {Math.round((totalAttempts / questions.length) * 100)}%
                     </div>
                 </div>
 
-                {/* Stars */}
-                <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-2xl p-4 border-2 border-yellow-300 shadow-lg"
-                >
-                    <div className="flex items-center gap-3">
-                        <motion.div
-                            animate={{ rotate: [0, 10, -10, 0] }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                        >
-                            <Star className="w-10 h-10 text-yellow-600 fill-current" />
-                        </motion.div>
+                {/* Stars - Simplified */}
+                <div className="bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-xl p-3 border border-yellow-300">
+                    <div className="flex items-center gap-2">
+                        <Star className="w-7 h-7 text-yellow-600 fill-current" />
                         <div className="flex-1">
-                            <div className="text-sm text-yellow-700 font-semibold">Stars</div>
-                            <div className="text-3xl font-bold text-yellow-800">{totalStars.toFixed(1)}</div>
+                            <div className="text-xs text-yellow-700 font-medium">Stars</div>
+                            <div className="text-2xl font-bold text-yellow-800">{totalStars.toFixed(1)}</div>
                         </div>
                     </div>
-                </motion.div>
+                </div>
 
-                {/* Coins */}
-                <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="bg-gradient-to-br from-amber-100 to-amber-200 rounded-2xl p-4 border-2 border-amber-300 shadow-lg"
-                >
-                    <div className="flex items-center gap-3">
-                        <motion.div
-                            animate={{ y: [0, -5, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity }}
-                        >
-                            <Trophy className="w-10 h-10 text-amber-600 fill-current" />
-                        </motion.div>
+                {/* Coins - Simplified */}
+                <div className="bg-gradient-to-br from-amber-100 to-amber-200 rounded-xl p-3 border border-amber-300">
+                    <div className="flex items-center gap-2">
+                        <Trophy className="w-7 h-7 text-amber-600 fill-current" />
                         <div className="flex-1">
-                            <div className="text-sm text-amber-700 font-semibold">Coins</div>
-                            <div className="text-3xl font-bold text-amber-800">{totalCoins}</div>
+                            <div className="text-xs text-amber-700 font-medium">Coins</div>
+                            <div className="text-2xl font-bold text-amber-800">{totalCoins}</div>
                         </div>
                     </div>
-                </motion.div>
+                </div>
 
-                {/* Timer */}
-                <div className="bg-white/40 backdrop-blur-sm rounded-2xl p-4 border-2 border-white/50">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Clock className="w-5 h-5 text-blue-600" />
-                        <span className="font-bold text-blue-700 text-base">Timer</span>
+                {/* Timer - Compact */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl p-3 border border-white/60">
+                    <div className="flex items-center gap-1.5 mb-2">
+                        <Clock className="w-4 h-4 text-blue-600" />
+                        <span className="font-semibold text-blue-700 text-sm">Timer</span>
                     </div>
                     <QuizTimer
                         timeRemaining={questionTimer}
@@ -743,17 +741,17 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                         isActive={!showRulesModal && !showResults}
                     />
                     {quizStartTime && (
-                        <div className="mt-3 text-center">
-                            <div className="text-sm text-gray-600 font-medium">Total Time</div>
-                            <div className="text-lg font-bold text-blue-700">
+                        <div className="mt-2 text-center">
+                            <div className="text-xs text-gray-600 font-medium">Total Time</div>
+                            <div className="text-base font-bold text-blue-700">
                                 {Math.floor((Date.now() - quizStartTime) / 60000)}:{String(Math.floor(((Date.now() - quizStartTime) % 60000) / 1000)).padStart(2, '0')}
                             </div>
                         </div>
                     )}
                     {lastQuestionTime !== null && (
-                        <div className="mt-3 text-center">
-                            <div className="text-sm text-gray-600 font-medium">Last Question</div>
-                            <div className="text-lg font-bold text-green-600">{lastQuestionTime.toFixed(1)}s</div>
+                        <div className="mt-2 text-center">
+                            <div className="text-xs text-gray-600 font-medium">Last Question</div>
+                            <div className="text-base font-bold text-green-600">{lastQuestionTime.toFixed(1)}s</div>
                         </div>
                     )}
                 </div>
@@ -821,8 +819,8 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                     )}
                 </motion.div>
 
-                {/* Game Component - Centered and Optimized with Increased Width */}
-                <div className="flex-1 flex items-center justify-center overflow-hidden">
+                {/* Game Component - Optimized with Increased Size to prevent scrollbars */}
+                <div className="flex-1 flex items-center justify-center p-4">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={currentQuestionIndex}
@@ -841,28 +839,49 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
 
                                 switch (template) {
                                     case 'TAP_SELECT':
-                                        return <TapSelectGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        // Check if this is the unified Recognition skill
+                                        if (skill?.code === 'RF.ALL.1') {
+                                            return <FlashcardRecognitionGame
+                                                question={currentQuestion}
+                                                onAnswer={handleAnswer}
+                                                difficultyLevel={difficulty}
+                                                showHint={false}
+                                                isRulesModalOpen={showRulesModal}
+                                            />;
+                                        }
+                                        return <TapSelectGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'DRAG_DROP':
-                                        return <DragDropGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <DragDropGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'AUDIO_TO_LETTER':
-                                        return <AudioToLetterGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        // Check if this is the Recall skill (RF.ALL.3)
+                                        if (skill?.code === 'RF.ALL.3') {
+                                            return <RecallGame
+                                                question={currentQuestion}
+                                                onAnswer={handleAnswer}
+                                                difficultyLevel={difficulty}
+                                                showHint={false}
+                                                isRulesModalOpen={showRulesModal}
+                                                gameMode="tap"
+                                            />;
+                                        }
+                                        return <AudioToLetterGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'MEMORY_CARD':
-                                        return <MemoryCardGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <MemoryCardGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'SORTING':
-                                        return <SortingGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <SortingGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'PICTURE_TO_WORD':
-                                        return <PictureToWordGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <PictureToWordGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'PUZZLE_JOIN':
-                                        return <PuzzleJoinGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <PuzzleJoinGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'FIND_THE_WORD':
-                                        return <FindTheWordGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <FindTheWordGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'SEQUENCING':
-                                        return <SequencingGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <SequencingGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'ODD_ONE_OUT':
-                                        return <OddOneOutGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <OddOneOutGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     default:
                                         console.error('Unknown game template:', template);
-                                        return <TapSelectGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} />;
+                                        return <TapSelectGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                 }
                             })()}
                         </motion.div>

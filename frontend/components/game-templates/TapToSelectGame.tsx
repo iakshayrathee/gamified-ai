@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { BaseGameProps } from '@/lib/types/game.types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, Lightbulb, CheckCircle, XCircle } from 'lucide-react';
+import { Volume2, Lightbulb, CheckCircle, XCircle, Star, Clock, ArrowRight } from 'lucide-react';
 import CelebrationEffect from '@/components/ui/CelebrationEffect';
 import FloatingShapes from '@/components/ui/FloatingShapes';
 import SuccessAnimation from '@/components/ui/SuccessAnimation';
@@ -16,6 +16,7 @@ export default function TapToSelectGame({
     onAnswer,
     difficultyLevel,
     showHint,
+    isRulesModalOpen,
 }: BaseGameProps) {
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
     const [startTime] = useState(Date.now());
@@ -49,8 +50,10 @@ export default function TapToSelectGame({
     const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
 
     useEffect(() => {
-        const options = [question.correctAnswer, ...question.distractors];
-        setShuffledOptions(options.sort(() => Math.random() - 0.5));
+        if (question?.correctAnswer && question?.distractors) {
+            const options = [question.correctAnswer, ...question.distractors];
+            setShuffledOptions(options.sort(() => Math.random() - 0.5));
+        }
     }, [question?.id, question?.correctAnswer, question?.distractors]);
 
     // Safety check
@@ -100,11 +103,12 @@ export default function TapToSelectGame({
         }
 
         if (correct) {
-            // Correct answer - proceed to next question
+            // Correct answer - proceed to next question immediately to sync animations
+            onAnswer(correct, responseTime, hintUsed);
+            // Keep feedback visible for 2 seconds to sync with parent's AnswerFeedback card
             setTimeout(() => {
-                onAnswer(correct, responseTime, hintUsed);
                 setShowFeedback(false);
-            }, 1500);
+            }, 2000);
         } else {
             // Wrong answer
             if (attemptCount === 0) {
@@ -138,26 +142,28 @@ export default function TapToSelectGame({
         setShowCorrectAnswer(false);
     };
 
-    // Auto-play audio on mount and when question changes
+    // Auto-play audio on mount and when question changes, but only if modal is closed
     useEffect(() => {
-        playAudio();
+        if (!isRulesModalOpen) {
+            playAudio();
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [question?.id]);
+    }, [question?.id, isRulesModalOpen]);
 
     return (
-        <div className="relative flex flex-col items-center justify-start bg-white p-6 rounded-3xl shadow-2xl min-h-[600px] overflow-hidden">
+        <div className="relative flex flex-col items-center justify-start bg-white p-6 rounded-3xl shadow-2xl max-w-[1200px] max-h-[calc(100vh-120px)] w-full mx-auto overflow-auto min-h-[600px]">
             <FloatingShapes density="low" theme="default" />
             <SuccessAnimation show={showFeedback && isCorrect} intensity="high" />
 
             {/* Question Section - Centered at Top */}
-            <div className="w-full mb-6">
+            <div className="w-full mb-4">
                 <motion.div
                     key={`prompt-${question?.id}`}
                     initial={{ y: -50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     className="text-center relative z-10"
                 >
-                    <h2 className="text-5xl md:text-6xl font-bold text-purple-800 mb-6">
+                    <h2 className="text-4xl md:text-5xl font-bold text-purple-800 mb-4 leading-tight">
                         {question?.promptText}
                     </h2>
 
@@ -166,16 +172,16 @@ export default function TapToSelectGame({
                         onClick={playAudio}
                         whileHover={{ scale: 1.1, rotate: 5 }}
                         whileTap={{ scale: 0.95 }}
-                        className="bg-white hover:bg-purple-50 text-purple-600 rounded-full p-5 shadow-xl transition-all"
+                        className="bg-white hover:bg-purple-50 text-purple-600 rounded-full p-4 shadow-xl transition-all"
                     >
-                        <Volume2 className="w-10 h-10" />
+                        <Volume2 className="w-8 h-8" />
                     </motion.button>
                 </motion.div>
             </div>
 
 
-            {/* Feedback Overlay - Absolute positioned to prevent layout shift */}
-            <div className="absolute top-40 left-1/2 -translate-x-1/2 z-20 w-full max-w-5xl px-6">
+            {/* Feedback Overlay - Fixed positioning to not overlap options */}
+            <div className="w-full max-w-5xl mx-auto mb-4">
                 {/* Auto Hint Message */}
                 <AnimatePresence>
                     {showAutoHint && !showCorrectAnswer && (
@@ -184,11 +190,11 @@ export default function TapToSelectGame({
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0, opacity: 0, y: -20 }}
                             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                            className="mb-6 bg-yellow-100 border-4 border-yellow-400 rounded-2xl p-6 shadow-xl"
+                            className="mb-4 bg-yellow-100 border-4 border-yellow-400 rounded-2xl p-4 shadow-xl"
                         >
                             <div className="flex items-center gap-3 text-yellow-800 justify-center">
-                                <Lightbulb className="w-8 h-8 fill-current animate-pulse" />
-                                <p className="text-2xl font-bold">
+                                <Lightbulb className="w-6 h-6 fill-current animate-pulse" />
+                                <p className="text-lg font-bold">
                                     Try again! Look for the highlighted answer! 💡
                                 </p>
                             </div>
@@ -196,43 +202,83 @@ export default function TapToSelectGame({
                     )}
                 </AnimatePresence>
 
-                {/* Correct Answer Reveal */}
+                {/* Correct Answer Reveal - Professional and Compact */}
                 <AnimatePresence>
                     {showCorrectAnswer && (
                         <motion.div
-                            initial={{ scale: 0, opacity: 0, y: -20 }}
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                            className="mb-6 bg-blue-100 border-4 border-blue-400 rounded-2xl p-8 shadow-xl text-center"
+                            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                            className="mb-6 bg-white border-2 border-indigo-200 rounded-3xl p-6 shadow-2xl overflow-hidden relative"
                         >
-                            <CheckCircle className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-                            <p className="text-2xl font-bold text-blue-800 mb-4">
-                                The correct answer is:
-                            </p>
+                            {/* Decorative background element */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 opacity-50" />
+
+                            {/* Header */}
+                            <div className="text-center mb-4 relative z-10">
+                                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full mb-2">
+                                    <Lightbulb className="w-6 h-6" />
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900">
+                                    Learning Moment!
+                                </h3>
+                                <p className="text-gray-500 text-sm">
+                                    Here is the correct answer to learn from:
+                                </p>
+                            </div>
+
+                            {/* Correct Answer Display */}
                             <motion.div
-                                initial={{ scale: 0 }}
+                                initial={{ scale: 0.95 }}
                                 animate={{ scale: 1 }}
-                                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                                className="bg-green-500 text-white text-4xl font-bold py-6 px-12 rounded-2xl mb-6 inline-block shadow-lg"
+                                className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white text-3xl font-bold py-4 px-8 rounded-2xl mb-6 text-center shadow-lg"
                             >
                                 {question.correctAnswer}
                             </motion.div>
+
+                            {/* Stats Row - Compact */}
+                            <div className="flex items-center justify-center gap-6 mb-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                                        <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                                    </div>
+                                    <div className="text-left">
+                                        <div className="text-lg font-bold text-gray-800">0</div>
+                                        <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Stars</div>
+                                    </div>
+                                </div>
+                                <div className="w-px h-8 bg-gray-200" />
+                                <div className="flex items-center gap-2">
+                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <Clock className="w-5 h-5 text-blue-500" />
+                                    </div>
+                                    <div className="text-left">
+                                        <div className="text-lg font-bold text-gray-800">
+                                            {((Date.now() - startTime) / 1000).toFixed(1)}s
+                                        </div>
+                                        <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Time</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Continue Button */}
                             <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={handleContinue}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-full font-bold text-xl transition-all shadow-lg"
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3.5 rounded-xl font-bold text-lg transition-all shadow-md flex items-center justify-center gap-3"
                             >
-                                Continue to Next Question →
+                                Continue to Next Question
+                                <ArrowRight className="w-5 h-5" />
                             </motion.button>
                         </motion.div>
                     )}
                 </AnimatePresence>
             </div>
 
-            {/* Options - Full Width Grid */}
+            {/* Options - Full Width Grid - Optimized sizing */}
             {!showCorrectAnswer && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl w-full relative z-10 mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl w-full relative z-10 mx-auto">
                     {shuffledOptions.map((option, index) => {
                         const isSelected = selectedAnswer === option;
                         const isCorrectOption = option === question.correctAnswer;
@@ -249,56 +295,55 @@ export default function TapToSelectGame({
                                 <motion.button
                                     key={`${question.id}-${option}-${index}`}
                                     data-answer={option}
-                                    initial={{ scale: 0, opacity: 0 }}
-                                    animate={{
-                                        scale: shouldHighlight ? [1, 1.1, 1, 1.1, 1] : 1,
-                                        opacity: 1
-                                    }}
-                                    transition={{
-                                        scale: { duration: 0.5, repeat: shouldHighlight ? Infinity : 0 },
-                                        delay: index * 0.1
-                                    }}
-                                    whileHover={{ scale: selectedAnswer ? 1 : 1.05 }}
-                                    whileTap={{ scale: selectedAnswer ? 1 : 0.95 }}
                                     onClick={() => handleSelect(option)}
-                                    disabled={!!selectedAnswer && !showAutoHint}
+                                    disabled={showFeedback}
+                                    initial={{ scale: 0, rotate: -10 }}
+                                    animate={{ scale: 1, rotate: 0 }}
+                                    transition={{ delay: index * 0.1, type: 'spring' }}
+                                    whileHover={!showFeedback ? { scale: 1.03, y: -3 } : {}}
+                                    whileTap={!showFeedback ? { scale: 0.97 } : {}}
                                     className={`
-                                        relative p-10 rounded-3xl text-4xl md:text-5xl font-bold shadow-2xl
-                                        transition-all duration-300 transform w-full min-h-[180px]
-                                        flex items-center justify-center border-4
-                                        ${showAsCorrect
-                                            ? 'bg-gradient-to-br from-green-400 to-green-600 text-white ring-8 ring-green-300 border-green-500'
-                                            : showAsWrong
-                                                ? 'bg-gradient-to-br from-red-400 to-red-600 text-white ring-8 ring-red-300 border-red-500'
-                                                : shouldHighlight
-                                                    ? 'bg-gradient-to-br from-yellow-200 to-yellow-300 text-purple-800 ring-8 ring-yellow-400 border-yellow-500'
-                                                    : 'bg-gradient-to-br from-white to-purple-50 text-purple-800 hover:from-purple-50 hover:to-purple-100 border-purple-200 hover:border-purple-400'
+                                        relative p-6 rounded-2xl text-3xl font-bold
+                                        transition-all duration-300 shadow-xl
+                                        ${shouldHighlight
+                                            ? 'bg-gradient-to-br from-yellow-300 to-yellow-400 text-yellow-900 ring-8 ring-yellow-500 ring-opacity-50 animate-pulse'
+                                            : showAsCorrect
+                                                ? 'bg-gradient-to-br from-green-400 to-emerald-500 text-white'
+                                                : showAsWrong
+                                                    ? 'bg-gradient-to-br from-red-400 to-pink-500 text-white'
+                                                    : 'bg-white hover:bg-purple-50 text-purple-800'
                                         }
-                                        ${selectedAnswer && !showAutoHint ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+                                        ${showFeedback ? 'cursor-not-allowed' : 'cursor-pointer'}
+                                        border-4 ${shouldHighlight
+                                            ? 'border-yellow-500'
+                                            : showAsCorrect
+                                                ? 'border-green-600'
+                                                : showAsWrong
+                                                    ? 'border-red-600'
+                                                    : 'border-purple-200'
+                                        }
                                     `}
                                 >
-                                    {option}
-
                                     {/* Feedback Icons */}
                                     <AnimatePresence>
                                         {showAsCorrect && (
                                             <motion.div
                                                 initial={{ scale: 0, rotate: -180 }}
                                                 animate={{ scale: 1, rotate: 0 }}
-                                                transition={{ type: "spring", stiffness: 200 }}
-                                                className="absolute -top-4 -right-4"
+                                                exit={{ scale: 0 }}
+                                                className="absolute -top-3 -right-3 bg-green-500 rounded-full p-2 shadow-xl"
                                             >
-                                                <CheckCircle className="w-16 h-16 text-green-600 bg-white rounded-full shadow-lg" />
+                                                <CheckCircle className="w-8 h-8 text-white fill-current" />
                                             </motion.div>
                                         )}
                                         {showAsWrong && (
                                             <motion.div
                                                 initial={{ scale: 0, rotate: 180 }}
                                                 animate={{ scale: 1, rotate: 0 }}
-                                                transition={{ type: "spring", stiffness: 200 }}
-                                                className="absolute -top-4 -right-4"
+                                                exit={{ scale: 0 }}
+                                                className="absolute -top-3 -right-3 bg-red-500 rounded-full p-2 shadow-xl"
                                             >
-                                                <XCircle className="w-16 h-16 text-red-600 bg-white rounded-full shadow-lg" />
+                                                <XCircle className="w-8 h-8 text-white fill-current" />
                                             </motion.div>
                                         )}
                                         {shouldHighlight && (
@@ -306,12 +351,17 @@ export default function TapToSelectGame({
                                                 initial={{ scale: 0 }}
                                                 animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
                                                 transition={{ duration: 0.5, repeat: Infinity }}
-                                                className="absolute -top-4 -right-4"
+                                                className="absolute -top-3 -right-3"
                                             >
-                                                <Lightbulb className="w-16 h-16 text-yellow-500 fill-current bg-white rounded-full p-2 shadow-lg" />
+                                                <Lightbulb className="w-12 h-12 text-yellow-500 fill-current bg-white rounded-full p-2 shadow-lg" />
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
+
+                                    {/* Option Text - Increased minimum size */}
+                                    <div className="flex items-center justify-center min-h-[100px] min-w-[200px]">
+                                        {option}
+                                    </div>
                                 </motion.button>
                             </ShakeAnimation>
                         );

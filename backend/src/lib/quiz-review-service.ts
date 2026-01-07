@@ -245,7 +245,7 @@ Keep all text concise but meaningful. Focus on what they did well and one key im
             });
 
             if (existingReview) {
-                console.log('Quiz review already exists for session:', sessionId);
+                // console.log('Quiz review already exists for session:', sessionId);
                 return;
             }
 
@@ -269,7 +269,7 @@ Keep all text concise but meaningful. Focus on what they did well and one key im
                 }
             });
 
-            console.log('Quiz review saved successfully for session:', sessionId);
+            // console.log('Quiz review saved successfully for session:', sessionId);
         } catch (error) {
             console.error('Error saving quiz review:', error);
             // Don't throw error - we don't want to break the quiz flow if saving fails

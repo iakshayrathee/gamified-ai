@@ -14,6 +14,7 @@ export default function AudioToLetterGame({
     onAnswer,
     difficultyLevel,
     showHint,
+    isRulesModalOpen,
 }: BaseGameProps) {
     // Safety check
     if (!question || !question.correctAnswer || !question.distractors) {
@@ -60,16 +61,22 @@ export default function AudioToLetterGame({
             playIncorrectSound();
         }
 
-        setTimeout(() => {
+        if (correct) {
             onAnswer(correct, responseTime, hintUsed);
-        }, 2000);
+        } else {
+            setTimeout(() => {
+                onAnswer(correct, responseTime, hintUsed);
+            }, 2000);
+        }
     };
 
     useEffect(() => {
-        playAudio();
+        if (!isRulesModalOpen) {
+            playAudio();
+        }
         return () => stop(); // Cleanup on unmount
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [question?.id, isRulesModalOpen]);
 
     return (
         <GameContainer showSuccess={showFeedback && isCorrect}>

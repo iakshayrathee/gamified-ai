@@ -270,14 +270,22 @@ app.get('/api/skills/:skillId/questions', async (req: Request, res: Response) =>
             }
         });
 
-        // Transform to include gameTemplate at root level for frontend compatibility
-        const questionsWithTemplate = questions.map(q => ({
+        // Parse JSON fields and transform to include gameTemplate at root level
+        const parsedQuestions = questions.map(q => ({
             ...q,
             gameTemplate: q.microSkill.gameTemplate,
+            distractors: Array.isArray(q.distractors)
+                ? q.distractors
+                : typeof q.distractors === 'string'
+                    ? JSON.parse(q.distractors)
+                    : [],
+            assetUrls: typeof q.assetUrls === 'string'
+                ? JSON.parse(q.assetUrls)
+                : q.assetUrls,
             microSkill: undefined // Remove nested object
         }));
 
-        res.json(questionsWithTemplate);
+        res.json(parsedQuestions);
     } catch (error) {
         console.error('Error fetching questions:', error);
         res.status(500).json({ error: 'Failed to fetch questions' });
@@ -387,6 +395,29 @@ app.get('/api/teacher/:teacherId/students', async (req: Request, res: Response) 
     }
 });
 
+// Get word mastery progress for a child
+app.get('/api/child/:childId/word-mastery/:skillId', async (req: Request, res: Response) => {
+    try {
+        const { childId, skillId } = req.params;
+
+        const wordMastery = await prisma.wordMastery.findMany({
+            where: { childId, microSkillId: skillId },
+            orderBy: { accuracyPercentage: 'desc' }
+        });
+
+        const { default: SightWordService } = await import('./lib/sight-word-service');
+        const summary = await SightWordService.getProgressSummary(childId, skillId);
+
+        res.json({
+            wordMastery,
+            summary
+        });
+    } catch (error) {
+        console.error('Error fetching word mastery:', error);
+        res.status(500).json({ error: 'Failed to fetch word mastery' });
+    }
+});
+
 // Log attempt
 app.post('/api/attempts', async (req: Request, res: Response) => {
     try {
@@ -492,17 +523,17 @@ app.post('/api/attempts', async (req: Request, res: Response) => {
         // Get next question difficulty based on LAST 5 attempts
         // Note: attemptData is ordered DESC (newest first), so slice(0, 5) gets the 5 most recent
         const last5Attempts = attemptData.slice(0, 5);
-        console.log(`[ADAPTIVE] Analyzing last ${last5Attempts.length} attempts for difficulty recommendation`);
-        console.log(`[ADAPTIVE] Current difficulty: ${difficultyLevelAtAttempt}`);
-        console.log(`[ADAPTIVE] Last 5 attempts accuracy: ${last5Attempts.filter(a => a.isCorrect).length}/${last5Attempts.length}`);
-        console.log(`[ADAPTIVE] Last 5 attempts times: ${last5Attempts.map(a => a.responseTimeSeconds.toFixed(1)).join(', ')}s`);
+        // console.log(`[ADAPTIVE] Analyzing last ${last5Attempts.length} attempts for difficulty recommendation`);
+        // console.log(`[ADAPTIVE] Current difficulty: ${difficultyLevelAtAttempt}`);
+        // console.log(`[ADAPTIVE] Last 5 attempts accuracy: ${last5Attempts.filter(a => a.isCorrect).length}/${last5Attempts.length}`);
+        // console.log(`[ADAPTIVE] Last 5 attempts times: ${last5Attempts.map(a => a.responseTimeSeconds.toFixed(1)).join(', ')}s`);
 
         const nextQuestionDifficulty = AdaptiveDifficultyEngine.getAdaptiveDifficultyForNextQuestion(
             last5Attempts, // Get last 5 attempts (first 5 from desc-ordered array)
             difficultyLevelAtAttempt as 1 | 2 | 3
         );
 
-        console.log(`[ADAPTIVE] Recommended next difficulty: ${nextQuestionDifficulty}`);
+        // console.log(`[ADAPTIVE] Recommended next difficulty: ${nextQuestionDifficulty}`);
 
         // Update skill progress with recalculated accuracy and AI insights
         const existingProgress = await prisma.skillProgress.findUnique({
@@ -533,7 +564,7 @@ app.post('/api/attempts', async (req: Request, res: Response) => {
         }
 
         // Update skill progress with recalculated accuracy and AI insights
-        await prisma.skillProgress.upsert({
+        const updatedProgress = await prisma.skillProgress.upsert({
             where: {
                 childId_microSkillId: {
                     childId,
@@ -564,7 +595,113 @@ app.post('/api/attempts', async (req: Request, res: Response) => {
                 learningTrend: 'stable',
                 lastAttemptedAt: new Date(),
             },
+            include: {
+                microSkill: true
+            }
         });
+
+        // Calculate tier for Reading Foundation Recognition stage (RF.ALL.1)
+        let tierInfo = null;
+        if (updatedProgress.microSkill.code === 'RF.ALL.1') {
+            // Get the question to extract the word
+            const question = await prisma.question.findUnique({
+                where: { id: questionId }
+            });
+
+            if (question) {
+                const word = question.correctAnswer;
+
+                // Update word mastery for this specific word
+                const existingWordMastery = await prisma.wordMastery.findUnique({
+                    where: {
+                        childId_word_microSkillId: {
+                            childId,
+                            word,
+                            microSkillId
+                        }
+                    }
+                });
+
+                const newCorrect = (existingWordMastery?.correctAttempts || 0) + (isCorrect ? 1 : 0);
+                const newTotal = (existingWordMastery?.totalAttempts || 0) + 1;
+                const newWordAccuracy = (newCorrect / newTotal) * 100;
+                const newAvgTime = existingWordMastery
+                    ? (existingWordMastery.avgResponseTime * existingWordMastery.totalAttempts + responseTimeSeconds) / newTotal
+                    : responseTimeSeconds;
+
+                const { default: SightWordService } = await import('./lib/sight-word-service');
+                const wordTier = SightWordService.calculateTier(newWordAccuracy);
+
+                await prisma.wordMastery.upsert({
+                    where: {
+                        childId_word_microSkillId: {
+                            childId,
+                            word,
+                            microSkillId
+                        }
+                    },
+                    update: {
+                        totalAttempts: newTotal,
+                        correctAttempts: newCorrect,
+                        accuracyPercentage: newWordAccuracy,
+                        avgResponseTime: newAvgTime,
+                        tier: wordTier.tier,
+                        tierLabel: wordTier.label,
+                        lastAttemptedAt: new Date(),
+                        masteredAt: wordTier.tier === 1 ? new Date() : null
+                    },
+                    create: {
+                        childId,
+                        word,
+                        microSkillId,
+                        totalAttempts: 1,
+                        correctAttempts: isCorrect ? 1 : 0,
+                        accuracyPercentage: isCorrect ? 100 : 0,
+                        avgResponseTime: responseTimeSeconds,
+                        tier: wordTier.tier,
+                        tierLabel: wordTier.label
+                    }
+                });
+
+                // Calculate overall tier across all words attempted so far
+                if (newTotalAttempts >= 10) {
+                    const allWordMastery = await prisma.wordMastery.findMany({
+                        where: { childId, microSkillId }
+                    });
+
+                    const overallTier = SightWordService.calculateOverallTier(allWordMastery);
+                    const errorPatterns = SightWordService.analyzeErrorPatterns(recentAttempts as any);
+                    const riskIndicator = SightWordService.calculateRiskIndicator(errorPatterns, overallTier.tier);
+
+                    // Store tier information in aiInsights
+                    const aiInsights = {
+                        tier: overallTier.tier,
+                        tierLabel: overallTier.label,
+                        tierEmoji: overallTier.emoji,
+                        tierDescription: overallTier.description,
+                        errorPatterns,
+                        riskIndicator,
+                        wordsAttempted: allWordMastery.length,
+                        wordsMastered: allWordMastery.filter(wm => wm.tier === 1).length,
+                        calculatedAt: new Date().toISOString()
+                    };
+
+                    await prisma.skillProgress.update({
+                        where: {
+                            childId_microSkillId: {
+                                childId,
+                                microSkillId,
+                            }
+                        },
+                        data: {
+                            aiInsights: JSON.stringify(aiInsights)
+                        }
+                    });
+
+                    tierInfo = overallTier;
+                }
+            }
+        }
 
         res.json({
             attempt,
@@ -578,6 +715,7 @@ app.post('/api/attempts', async (req: Request, res: Response) => {
             },
             nextQuestionDifficulty,
             behavioralTip, // New: behavioral tip for child assessment
+            tierInfo, // New: tier classification for Reading Foundation
         });
     } catch (error) {
         console.error('Error logging attempt:', error);

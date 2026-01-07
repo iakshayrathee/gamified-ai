@@ -5,7 +5,7 @@ import { BaseGameProps } from '@/lib/types/game.types';
 import { motion } from 'framer-motion';
 import GameContainer from './GameContainer';
 
-export default function MemoryCardGame({ question, onAnswer, difficultyLevel }: BaseGameProps) {
+export default function MemoryCardGame({ question, onAnswer, difficultyLevel, isRulesModalOpen }: BaseGameProps) {
     // Safety check
     if (!question || !question.correctAnswer || !question.distractors || question.distractors.length < 2) {
         return (
@@ -46,7 +46,7 @@ export default function MemoryCardGame({ question, onAnswer, difficultyLevel }: 
                 if (newMatched.length === shuffled.length) {
                     setGameComplete(true);
                     const responseTime = (Date.now() - startTime) / 1000;
-                    setTimeout(() => onAnswer(true, responseTime, false), 1500);
+                    onAnswer(true, responseTime, false);
                 }
             } else {
                 setTimeout(() => setFlipped([]), 1000);

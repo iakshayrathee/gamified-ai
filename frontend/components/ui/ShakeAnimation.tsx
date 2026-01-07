@@ -7,6 +7,7 @@ interface ShakeAnimationProps {
     children: ReactNode;
     trigger: boolean;
     intensity?: 'low' | 'medium' | 'high';
+    className?: string;
     onComplete?: () => void;
 }
 
@@ -14,6 +15,7 @@ export default function ShakeAnimation({
     children,
     trigger,
     intensity = 'medium',
+    className = '',
     onComplete
 }: ShakeAnimationProps) {
     const getShakeDistance = () => {
@@ -29,6 +31,7 @@ export default function ShakeAnimation({
 
     return (
         <motion.div
+            className={className}
             animate={trigger ? {
                 x: [0, -distance, distance, -distance, distance, -distance / 2, distance / 2, 0],
                 transition: {

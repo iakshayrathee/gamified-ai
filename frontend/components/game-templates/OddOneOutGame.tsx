@@ -14,21 +14,20 @@ interface OddOneOutItem {
     category?: string;
 }
 
-interface OddOneOutGameProps {
-    items: OddOneOutItem[];
-    instruction: string;
-    explanation?: string;
-    onComplete: (correct: boolean, timeSeconds: number) => void;
-    onHintRequest?: () => void;
-}
+import { BaseGameProps } from '@/lib/types/game.types';
 
 export default function OddOneOutGame({
-    items,
-    instruction,
-    explanation,
-    onComplete,
-    onHintRequest
-}: OddOneOutGameProps) {
+    question,
+    onAnswer,
+    difficultyLevel,
+    showHint: shouldShowHint,
+    isRulesModalOpen,
+}: BaseGameProps) {
+    const items: OddOneOutItem[] = question.assetUrls?.items || [];
+    const instruction: string = question.promptText || '';
+    const explanation: string = question.assetUrls?.explanation || '';
+    const onComplete = (correct: boolean, timeSeconds: number) => onAnswer(correct, timeSeconds, false);
+
     const [selectedItem, setSelectedItem] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
     const [startTime] = useState(Date.now());
@@ -53,14 +52,17 @@ export default function OddOneOutGame({
 
         setFeedback(isCorrect ? 'correct' : 'incorrect');
 
-        setTimeout(() => {
+        if (isCorrect) {
             onComplete(isCorrect, timeSeconds);
-        }, 2000);
+        } else {
+            setTimeout(() => {
+                onComplete(isCorrect, timeSeconds);
+            }, 2000);
+        }
     };
 
     const handleHint = () => {
         setShowHint(true);
-        onHintRequest?.();
         setTimeout(() => setShowHint(false), 3000);
     };
 

@@ -24,6 +24,7 @@ model User {
   skillProgress      SkillProgress[]
   uploadedDocuments  UploadedDocument[]  @relation("UploadedDocuments")
   quizReviews        QuizReview[]        @relation("ChildQuizReviews")
+  wordMastery        WordMastery[]       @relation("ChildWordMastery")
   teacher            User?               @relation("TeacherChildren", fields: [teacherId], references: [id])
   children           User[]              @relation("TeacherChildren")
 
@@ -66,6 +67,7 @@ model MicroSkill {
   skillProgress        SkillProgress[]
   quizReviews          QuizReview[]        @relation("QuizReviewSkills")
   recommendedInReviews QuizReview[]        @relation("RecommendedSkills")
+  wordMastery          WordMastery[]       @relation("SkillWordMastery")
 
   @@index([domainId])
   @@index([code])
@@ -304,6 +306,37 @@ model ExtractedQuestion {
   @@index([documentId])
   @@index([reviewStatus])
   @@index([skillId])
+}
+
+model WordMastery {
+  id                  String     @id @default(cuid())
+  childId             String
+  word                String
+  microSkillId        String
+  
+  // Performance Metrics
+  totalAttempts       Int        @default(0)
+  correctAttempts     Int        @default(0)
+  accuracyPercentage  Float      @default(0)
+  avgResponseTime     Float      @default(0)
+  
+  // Tier Classification
+  tier                Int?       // 1, 2, or 3
+  tierLabel           String?
+  
+  // Timestamps
+  firstAttemptedAt    DateTime   @default(now())
+  lastAttemptedAt     DateTime   @updatedAt
+  masteredAt          DateTime?
+  
+  // Relations
+  child               User       @relation("ChildWordMastery", fields: [childId], references: [id])
+  microSkill          MicroSkill @relation("SkillWordMastery", fields: [microSkillId], references: [id])
+  
+  @@unique([childId, word, microSkillId])
+  @@index([childId])
+  @@index([word])
+  @@index([microSkillId])
 }
 
 enum UserRole {

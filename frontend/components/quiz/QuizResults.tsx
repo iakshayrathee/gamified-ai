@@ -60,7 +60,6 @@ export default function QuizResults({
         // Only load once
         if (!hasLoadedRef.current) {
             hasLoadedRef.current = true;
-            console.log('QuizResults mounted with props:', { sessionId, childId, accuracy });
             loadAIReviewAndRecommendation();
         }
     }, []);
@@ -75,13 +74,10 @@ export default function QuizResults({
                 throw new Error('Session ID and Child ID are required for AI review');
             }
 
-            console.log('Fetching AI review and recommendation (MERGED CALL)...');
+            throw new Error('Session ID and Child ID are required for AI review');
 
             // OPTIMIZED: Single API call instead of two!
             const result = await ApiClient.getQuizReviewWithRecommendation(sessionId, childId);
-
-            console.log('AI Review received:', result.review);
-            console.log('Recommendation received:', result.recommendation);
 
             setReview(result.review);
             setRecommendation(result.recommendation);

@@ -12,25 +12,22 @@ interface PuzzlePiece {
     audioUrl?: string;
 }
 
-interface PuzzleJoinGameProps {
-    onset: PuzzlePiece;
-    rimes: PuzzlePiece[];
-    correctRime: string;
-    resultWord: string;
-    resultImageUrl?: string;
-    onComplete: (correct: boolean, timeSeconds: number) => void;
-    onHintRequest?: () => void;
-}
+import { BaseGameProps } from '@/lib/types/game.types';
 
 export default function PuzzleJoinGame({
-    onset,
-    rimes,
-    correctRime,
-    resultWord,
-    resultImageUrl,
-    onComplete,
-    onHintRequest
-}: PuzzleJoinGameProps) {
+    question,
+    onAnswer,
+    difficultyLevel,
+    showHint: shouldShowHint,
+    isRulesModalOpen,
+}: BaseGameProps) {
+    const onset: PuzzlePiece = question.assetUrls?.onset;
+    const rimes: PuzzlePiece[] = question.assetUrls?.rimes || [];
+    const correctRime: string = question.correctAnswer;
+    const resultWord: string = question.assetUrls?.resultWord || '';
+    const resultImageUrl: string = question.assetUrls?.resultImageUrl;
+    const onComplete = (correct: boolean, timeSeconds: number) => onAnswer(correct, timeSeconds, false);
+
     const [selectedRime, setSelectedRime] = useState<PuzzlePiece | null>(null);
     const [joined, setJoined] = useState(false);
     const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
@@ -67,9 +64,13 @@ export default function PuzzleJoinGame({
 
         setFeedback(isCorrect ? 'correct' : 'incorrect');
 
-        setTimeout(() => {
+        if (isCorrect) {
             onComplete(isCorrect, timeSeconds);
-        }, 2000);
+        } else {
+            setTimeout(() => {
+                onComplete(isCorrect, timeSeconds);
+            }, 2000);
+        }
     };
 
     const handleReset = () => {
@@ -79,7 +80,6 @@ export default function PuzzleJoinGame({
 
     const handleHint = () => {
         setShowHint(true);
-        onHintRequest?.();
         setTimeout(() => setShowHint(false), 3000);
     };
 

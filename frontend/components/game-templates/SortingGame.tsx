@@ -17,14 +17,19 @@ interface SortingCategory {
     color: string;
 }
 
-interface SortingGameProps {
-    items: SortingItem[];
-    categories: SortingCategory[];
-    onComplete: (correct: boolean, timeSeconds: number) => void;
-    onHintRequest?: () => void;
-}
+import { BaseGameProps } from '@/lib/types/game.types';
 
-export default function SortingGame({ items, categories, onComplete, onHintRequest }: SortingGameProps) {
+export default function SortingGame({
+    question,
+    onAnswer,
+    difficultyLevel,
+    showHint: shouldShowHint,
+    isRulesModalOpen,
+}: BaseGameProps) {
+    const items: SortingItem[] = question.assetUrls?.items || [];
+    const categories: SortingCategory[] = question.assetUrls?.categories || [];
+    const onComplete = (correct: boolean, timeSeconds: number) => onAnswer(correct, timeSeconds, false);
+
     // Add null/undefined checks with default values
     const safeItems = items || [];
     const safeCategories = categories || [];
@@ -96,14 +101,17 @@ export default function SortingGame({ items, categories, onComplete, onHintReque
         const timeSeconds = (Date.now() - startTime) / 1000;
         setFeedback(allCorrect ? 'correct' : 'incorrect');
 
-        setTimeout(() => {
+        if (allCorrect) {
             onComplete(allCorrect, timeSeconds);
-        }, 2000);
+        } else {
+            setTimeout(() => {
+                onComplete(allCorrect, timeSeconds);
+            }, 2000);
+        }
     };
 
     const handleHint = () => {
         setShowHint(true);
-        onHintRequest?.();
         setTimeout(() => setShowHint(false), 3000);
     };
 

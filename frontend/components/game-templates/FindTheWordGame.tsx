@@ -7,23 +7,21 @@ import GameContainer from './GameContainer';
 import ShakeAnimation from '@/components/ui/ShakeAnimation';
 import { useSpeech } from '@/hooks/useSpeech';
 
-interface FindTheWordGameProps {
-    sentence: string;
-    targetWord: string;
-    audioUrl?: string;
-    imageUrl?: string;
-    onComplete: (correct: boolean, timeSeconds: number) => void;
-    onHintRequest?: () => void;
-}
+import { BaseGameProps } from '@/lib/types/game.types';
 
 export default function FindTheWordGame({
-    sentence,
-    targetWord,
-    audioUrl,
-    imageUrl,
-    onComplete,
-    onHintRequest
-}: FindTheWordGameProps) {
+    question,
+    onAnswer,
+    difficultyLevel,
+    showHint: shouldShowHint,
+    isRulesModalOpen,
+}: BaseGameProps) {
+    const sentence: string = question.promptText;
+    const targetWord: string = question.correctAnswer;
+    const audioUrl: string = question.promptAudioUrl || '';
+    const imageUrl: string = question.assetUrls?.imageUrl || '';
+    const onComplete = (correct: boolean, timeSeconds: number) => onAnswer(correct, timeSeconds, false);
+
     const words = (sentence || '').split(' ').filter(word => word.trim() !== '');
     const [selectedWord, setSelectedWord] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
@@ -48,15 +46,18 @@ export default function FindTheWordGame({
 
         setFeedback(isCorrect ? 'correct' : 'incorrect');
 
-        setTimeout(() => {
+        if (isCorrect) {
             onComplete(isCorrect, timeSeconds);
-        }, 2000);
+        } else {
+            setTimeout(() => {
+                onComplete(isCorrect, timeSeconds);
+            }, 2000);
+        }
     };
 
     const handleHint = () => {
         setShowHint(true);
         playAudio();
-        onHintRequest?.();
         setTimeout(() => setShowHint(false), 3000);
     };
 

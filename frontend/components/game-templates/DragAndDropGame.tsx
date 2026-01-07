@@ -60,6 +60,7 @@ export default function DragAndDropGame({
     onAnswer,
     difficultyLevel,
     showHint,
+    isRulesModalOpen,
 }: BaseGameProps) {
     // Safety check
     if (!question || !question.correctAnswer || !question.distractors) {
@@ -113,67 +114,76 @@ export default function DragAndDropGame({
                 playIncorrectSound();
             }
 
-            setTimeout(() => {
+            if (correct) {
+                // Correct answer - proceed immediately
                 onAnswer(correct, responseTime, hintUsed);
-            }, 2000);
+                // Keep feedback visible for 2 seconds to sync with parent's card
+                setTimeout(() => setShowFeedback(false), 2000);
+            } else {
+                setTimeout(() => {
+                    onAnswer(correct, responseTime, hintUsed);
+                }, 2000);
+            }
         }
     };
 
     useEffect(() => {
-        playAudio();
+        if (!isRulesModalOpen) {
+            playAudio();
+        }
         return () => stop(); // Cleanup on unmount
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [question?.id, isRulesModalOpen]);
 
     return (
         <GameContainer showSuccess={showFeedback && isCorrect}>
-            {/* Question Section - Centered at Top */}
-            <div className="w-full mb-8">
+            {/* Question Section - Centered at Top - Optimized */}
+            <div className="w-full mb-6">
                 <motion.div
                     initial={{ y: -50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     className="text-center relative z-10"
                 >
-                    <h2 className="text-5xl md:text-6xl font-bold text-blue-800 mb-6">{question?.promptText}</h2>
+                    <h2 className="text-4xl md:text-5xl font-bold text-blue-800 mb-4 leading-tight">{question?.promptText}</h2>
                     <motion.button
                         onClick={playAudio}
                         whileHover={{ scale: 1.1, rotate: 5 }}
                         whileTap={{ scale: 0.95 }}
-                        className="bg-white hover:bg-blue-50 text-blue-600 rounded-full p-5 shadow-xl transition-all"
+                        className="bg-white hover:bg-blue-50 text-blue-600 rounded-full p-4 shadow-xl transition-all"
                     >
-                        <Volume2 className="w-10 h-10" />
+                        <Volume2 className="w-8 h-8" />
                     </motion.button>
                 </motion.div>
             </div>
 
             <DndContext onDragEnd={handleDragEnd}>
-                {/* Drop Zone - Centered */}
-                <div className="mb-10 w-full flex justify-center">
-                    <div className="w-full max-w-2xl">
-                        <p className="text-3xl font-bold text-blue-800 mb-5 text-center">Drag here:</p>
+                {/* Drop Zone - Centered - Optimized */}
+                <div className="mb-6 w-full flex justify-center">
+                    <div className="w-full max-w-xl">
+                        <p className="text-2xl font-bold text-blue-800 mb-3 text-center">Drag here:</p>
                         <DroppableZone id="drop-zone">
                             {droppedItem ? (
                                 <div
                                     className={`
-                      text-7xl font-bold text-center p-10 rounded-2xl
+                      text-5xl font-bold text-center p-6 rounded-2xl
                       ${isCorrect ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}
                     `}
                                 >
                                     {droppedItem}
                                     {showFeedback && (
-                                        <div className="text-9xl mt-6">{isCorrect ? '✓' : '✗'}</div>
+                                        <div className="text-6xl mt-4">{isCorrect ? '✓' : '✗'}</div>
                                     )}
                                 </div>
                             ) : (
-                                <div className="text-gray-400 text-center text-3xl py-8">Drop answer here</div>
+                                <div className="text-gray-400 text-center text-2xl py-6">Drop answer here</div>
                             )}
                         </DroppableZone>
                     </div>
                 </div>
 
-                {/* Draggable Options - Full Width Grid */}
+                {/* Draggable Options - Optimized sizing */}
                 {!droppedItem && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-8 max-w-6xl w-full mx-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl w-full mx-auto">
                         {shuffledOptions.map((option, index) => (
                             <motion.div
                                 key={option}
@@ -182,7 +192,7 @@ export default function DragAndDropGame({
                                 transition={{ delay: index * 0.1 }}
                             >
                                 <DraggableItem id={option}>
-                                    <div className="bg-gradient-to-br from-white to-blue-50 hover:from-blue-50 hover:to-blue-100 rounded-3xl p-8 text-6xl md:text-7xl font-bold text-center shadow-xl min-h-[180px] flex items-center justify-center transition-all border-4 border-blue-200 hover:border-blue-400">
+                                    <div className="bg-gradient-to-br from-white to-blue-50 hover:from-blue-50 hover:to-blue-100 rounded-2xl p-5 text-4xl md:text-5xl font-bold text-center shadow-lg min-h-[120px] flex items-center justify-center transition-all border-4 border-blue-200 hover:border-blue-400">
                                         {option}
                                     </div>
                                 </DraggableItem>
