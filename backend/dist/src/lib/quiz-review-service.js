@@ -167,7 +167,7 @@ Keep all text concise but meaningful. Focus on what they did well and one key im
                 where: { sessionId }
             });
             if (existingReview) {
-                console.log('Quiz review already exists for session:', sessionId);
+                // console.log('Quiz review already exists for session:', sessionId);
                 return;
             }
             await prisma.quizReview.create({
@@ -189,7 +189,7 @@ Keep all text concise but meaningful. Focus on what they did well and one key im
                     recommendedReason: recommendation?.reason || null
                 }
             });
-            console.log('Quiz review saved successfully for session:', sessionId);
+            // console.log('Quiz review saved successfully for session:', sessionId);
         }
         catch (error) {
             console.error('Error saving quiz review:', error);

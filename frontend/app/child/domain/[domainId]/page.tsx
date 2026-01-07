@@ -11,7 +11,6 @@ import FloatingShapes from '@/components/ui/FloatingShapes';
 import ChildNavbar from '@/components/navigation/ChildNavbar';
 import { useAuth } from '@/lib/auth-context';
 import { useChildProgress } from '@/lib/hooks/useApi';
-import ReadingFoundationDashboard from '@/components/reading-foundation/ReadingFoundationDashboard';
 
 interface SkillSelectionPageProps {
     params: Promise<{
@@ -46,6 +45,56 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
     const error = progressError ? 'Failed to load skills' : null;
 
     const [showTierInfo, setShowTierInfo] = useState(false);
+    const [showReport, setShowReport] = useState(false);
+    const [reportData, setReportData] = useState<any>(null);
+    const [loadingReport, setLoadingReport] = useState(false);
+
+    // Fetch report data when modal opens
+    useEffect(() => {
+        console.log('useEffect triggered:', { showReport, reportData: !!reportData, childId });
+        if (!showReport || reportData || !childId) return;
+
+        const fetchReportData = async () => {
+            console.log('Fetching report data...');
+            const recognitionSkill = skills.find((s: MicroSkill) => s.code === 'RF.ALL.1');
+            if (!recognitionSkill) {
+                console.log('No recognition skill found');
+                return;
+            }
+
+            console.log('Recognition skill found:', recognitionSkill.id);
+            setLoadingReport(true);
+            try {
+                const response = await fetch(`http://localhost:5000/api/child/${childId}/word-mastery/${recognitionSkill.id}`);
+                const data = await response.json();
+                console.log('Word mastery data:', data);
+
+                // Get AI insights from skill progress
+                const skillProg = skillProgress.find(sp => sp.microSkillId === recognitionSkill.id);
+                let aiInsights = null;
+                if (skillProg?.aiInsights) {
+                    aiInsights = typeof skillProg.aiInsights === 'string'
+                        ? JSON.parse(skillProg.aiInsights)
+                        : skillProg.aiInsights;
+                }
+
+                console.log('AI Insights:', aiInsights);
+
+                setReportData({
+                    wordMastery: data.wordMastery || [],
+                    skillProgress: skillProg,
+                    aiInsights
+                });
+            } catch (error) {
+                console.error('Error fetching report:', error);
+            } finally {
+                setLoadingReport(false);
+            }
+        };
+
+        fetchReportData();
+    }, [showReport, reportData, childId, skills, skillProgress]);
+
 
     if (loading || authLoading) {
         return (
@@ -118,23 +167,56 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
         return (
             <>
                 <ChildNavbar />
-                <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 pt-24 p-6">
+                <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 pt-24 p-6 relative">
                     <div className="max-w-6xl mx-auto">
                         {/* Header */}
                         <motion.div
                             initial={{ y: -50, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
-                            className="text-center mb-12"
+                            className="mb-12"
                         >
-                            <h1 className="text-6xl font-bold text-purple-800 mb-4">
-                                📚 Reading Foundation
-                            </h1>
-                            <p className="text-2xl text-purple-600 mb-2">
-                                Master all 80 Dolch Sight Words!
-                            </p>
-                            <p className="text-lg text-gray-600">
-                                Complete 5 stages: Recognition → Meaning → Recall → Reading → Spelling
-                            </p>
+                            {/* Title and Buttons Row */}
+                            <div className="flex items-center justify-between mb-4">
+                                <h1 className="text-6xl font-bold text-purple-800">
+                                    📚 Reading Foundation
+                                </h1>
+
+                                <div className="flex items-center gap-3">
+                                    {/* View Report Button */}
+                                    <motion.button
+                                        onClick={() => {
+                                            console.log('View Report clicked, setting showReport to true');
+                                            setShowReport(true);
+                                        }}
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        className="inline-flex items-center gap-2 bg-green-500 text-white px-6 py-3 rounded-full shadow-lg hover:bg-green-600 transition-colors font-semibold"
+                                    >
+                                        📊 View Report
+                                    </motion.button>
+
+                                    {/* Tier Info Button */}
+                                    <motion.button
+                                        onClick={() => setShowTierInfo(true)}
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        className="inline-flex items-center gap-2 bg-blue-500 text-white px-6 py-3 rounded-full shadow-lg hover:bg-blue-600 transition-colors font-semibold"
+                                    >
+                                        <Info className="w-5 h-5" />
+                                        What are Tiers?
+                                    </motion.button>
+                                </div>
+                            </div>
+
+                            {/* Subtitle */}
+                            <div className="text-center">
+                                <p className="text-2xl text-purple-600 mb-2">
+                                    Master all 80 Dolch Sight Words!
+                                </p>
+                                <p className="text-lg text-gray-600">
+                                    Complete 5 stages: Recognition → Meaning → Recall → Reading → Spelling
+                                </p>
+                            </div>
                         </motion.div>
 
                         {/* Skills Grid */}
@@ -159,21 +241,6 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
                                         whileHover={{ scale: 1.05, y: -5 }}
                                         className="bg-white rounded-3xl p-8 shadow-xl relative overflow-hidden"
                                     >
-                                        {/* Info Button for Recognition and Meaning skills */}
-                                        {(skill.code === 'RF.ALL.1' || skill.code === 'RF.ALL.2' || skill.code === 'RF.ALL.3') && (
-                                            <motion.button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setShowTierInfo(true);
-                                                }}
-                                                whileHover={{ scale: 1.1 }}
-                                                whileTap={{ scale: 0.9 }}
-                                                className="absolute top-4 right-4 bg-blue-500 text-white p-2 rounded-full shadow-lg hover:bg-blue-600 transition-colors z-10"
-                                            >
-                                                <Info className="w-5 h-5" />
-                                            </motion.button>
-                                        )}
-
                                         {/* Clickable card area */}
                                         <div onClick={() => router.push(`/child/play/${skill.id}`)} className="cursor-pointer">
                                             {/* Icon */}
@@ -329,7 +396,7 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
                             </motion.div>
                         )}
                     </div>
-                </div>
+                </div >
             </>
         );
     }
@@ -490,6 +557,203 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
                     </div>
                 </div>
             </div>
+
+            {/* AI Report Modal */}
+            {showReport && (
+                <>
+                    {console.log('Rendering modal, showReport:', showReport, 'loadingReport:', loadingReport, 'reportData:', !!reportData)}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        onClick={() => setShowReport(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white rounded-3xl p-8 max-w-6xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                        >
+                            {loadingReport ? (
+                                <div className="text-center py-12">
+                                    <div className="text-4xl mb-4">📊</div>
+                                    <div className="text-2xl font-bold text-purple-800">Loading Report...</div>
+                                </div>
+                            ) : reportData ? (
+                                <>
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between mb-8">
+                                        <h2 className="text-4xl font-bold text-purple-800">📊 Recognition Report</h2>
+                                        <button
+                                            onClick={() => setShowReport(false)}
+                                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                                        >
+                                            <X className="w-6 h-6 text-gray-600" />
+                                        </button>
+                                    </div>
+
+                                    {/* AI Insights */}
+                                    {reportData.aiInsights && (
+                                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-6 mb-6">
+                                            <h3 className="text-2xl font-bold text-purple-800 mb-4 flex items-center gap-2">
+                                                🧠 AI Insights
+                                                {reportData.aiInsights.isBaselineDiagnostic && (
+                                                    <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm">
+                                                        Baseline Diagnostic
+                                                    </span>
+                                                )}
+                                            </h3>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                {/* Tier */}
+                                                <div className={`p-4 rounded-xl ${reportData.aiInsights.tier === 1 ? 'bg-green-100' :
+                                                    reportData.aiInsights.tier === 2 ? 'bg-yellow-100' : 'bg-red-100'
+                                                    }`}>
+                                                    <div className="text-4xl mb-2">{reportData.aiInsights.tierEmoji}</div>
+                                                    <div className="text-xl font-bold">Tier {reportData.aiInsights.tier}</div>
+                                                    <div className="text-sm">{reportData.aiInsights.tierLabel}</div>
+                                                </div>
+
+                                                {/* Risk */}
+                                                <div className={`p-4 rounded-xl ${reportData.aiInsights.riskIndicator === 'low' ? 'bg-green-100' :
+                                                    reportData.aiInsights.riskIndicator === 'medium' ? 'bg-yellow-100' : 'bg-red-100'
+                                                    }`}>
+                                                    <div className="text-xl font-bold mb-1">Risk Level</div>
+                                                    <div className="text-2xl font-bold capitalize">{reportData.aiInsights.riskIndicator}</div>
+                                                </div>
+
+                                                {/* Progress */}
+                                                <div className="p-4 rounded-xl bg-purple-100">
+                                                    <div className="text-xl font-bold mb-2">Progress</div>
+                                                    <div className="text-sm mb-2">
+                                                        {reportData.aiInsights.wordsMastered} / {reportData.aiInsights.wordsAttempted} mastered
+                                                    </div>
+                                                    <div className="w-full bg-gray-300 rounded-full h-2">
+                                                        <div
+                                                            className="bg-purple-600 h-2 rounded-full"
+                                                            style={{ width: `${(reportData.aiInsights.wordsMastered / reportData.aiInsights.wordsAttempted) * 100}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Word Mastery Grid */}
+                                    <div className="mb-6">
+                                        <h3 className="text-2xl font-bold text-purple-800 mb-4">📚 Word Mastery</h3>
+
+                                        {(() => {
+                                            const strengthWords = reportData.wordMastery.filter((w: any) => w.tier === 1);
+                                            const strugglingWords = reportData.wordMastery.filter((w: any) => w.tier === 3);
+                                            const needsPracticeWords = reportData.wordMastery.filter((w: any) => w.tier === 2);
+
+                                            return (
+                                                <div className="space-y-4">
+                                                    {/* Summary */}
+                                                    <div className="grid grid-cols-3 gap-4">
+                                                        <div className="bg-green-50 p-4 rounded-xl border-2 border-green-300">
+                                                            <div className="text-3xl font-bold text-green-600">{strengthWords.length}</div>
+                                                            <div className="text-sm text-gray-600">Mastered (Tier 1)</div>
+                                                        </div>
+                                                        <div className="bg-yellow-50 p-4 rounded-xl border-2 border-yellow-300">
+                                                            <div className="text-3xl font-bold text-yellow-600">{needsPracticeWords.length}</div>
+                                                            <div className="text-sm text-gray-600">Needs Practice (Tier 2)</div>
+                                                        </div>
+                                                        <div className="bg-red-50 p-4 rounded-xl border-2 border-red-300">
+                                                            <div className="text-3xl font-bold text-red-600">{strugglingWords.length}</div>
+                                                            <div className="text-sm text-gray-600">Struggling (Tier 3)</div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Struggling Words - Priority */}
+                                                    {strugglingWords.length > 0 && (
+                                                        <div>
+                                                            <h4 className="text-lg font-bold text-red-600 mb-2">🚨 Priority: Struggling Words</h4>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {strugglingWords.map((word: any) => (
+                                                                    <div key={word.word} className="bg-red-100 px-3 py-2 rounded-full border-2 border-red-300">
+                                                                        <span className="font-bold text-red-800">{word.word}</span>
+                                                                        <span className="text-sm text-red-600 ml-2">{word.accuracyPercentage.toFixed(0)}%</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Needs Practice */}
+                                                    {needsPracticeWords.length > 0 && (
+                                                        <div>
+                                                            <h4 className="text-lg font-bold text-yellow-600 mb-2">📝 Needs Practice</h4>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {needsPracticeWords.map((word: any) => (
+                                                                    <div key={word.word} className="bg-yellow-100 px-3 py-2 rounded-full border-2 border-yellow-300">
+                                                                        <span className="font-bold text-yellow-800">{word.word}</span>
+                                                                        <span className="text-sm text-yellow-600 ml-2">{word.accuracyPercentage.toFixed(0)}%</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Mastered */}
+                                                    {strengthWords.length > 0 && (
+                                                        <div>
+                                                            <h4 className="text-lg font-bold text-green-600 mb-2">⭐ Mastered Words</h4>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {strengthWords.map((word: any) => (
+                                                                    <div key={word.word} className="bg-green-100 px-3 py-2 rounded-full border-2 border-green-300">
+                                                                        <span className="font-bold text-green-800">{word.word}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* Overall Stats */}
+                                    {reportData.skillProgress && (
+                                        <div className="bg-gray-50 rounded-2xl p-6">
+                                            <h3 className="text-2xl font-bold text-purple-800 mb-4">📈 Overall Performance</h3>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div className="text-center">
+                                                    <div className="text-3xl font-bold text-purple-600">
+                                                        {reportData.skillProgress.accuracyPercentage.toFixed(1)}%
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">Overall Accuracy</div>
+                                                </div>
+                                                <div className="text-center">
+                                                    <div className="text-3xl font-bold text-blue-600">
+                                                        {reportData.skillProgress.avgResponseTime.toFixed(1)}s
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">Avg Response Time</div>
+                                                </div>
+                                                <div className="text-center">
+                                                    <div className="text-3xl font-bold text-indigo-600">
+                                                        {reportData.skillProgress.totalAttempts}
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">Total Attempts</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="text-center py-12">
+                                    <div className="text-4xl mb-4">📊</div>
+                                    <div className="text-2xl font-bold text-gray-600">No report data available</div>
+                                    <p className="text-gray-500 mt-2">Complete some Recognition quizzes to see your report!</p>
+                                </div>
+                            )}
+                        </motion.div>
+                    </motion.div>
+                </>
+            )}
         </>
     );
 }

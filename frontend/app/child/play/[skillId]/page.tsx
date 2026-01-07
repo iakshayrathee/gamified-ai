@@ -21,6 +21,8 @@ import SequencingGame from '@/components/game-templates/SequencingGame';
 import OddOneOutGame from '@/components/game-templates/OddOneOutGame';
 import FlashcardRecognitionGame from '@/components/game-templates/FlashcardRecognitionGame';
 import RecallGame from '@/components/game-templates/RecallGame';
+import ReadingComprehensionGame from '@/components/game-templates/ReadingComprehensionGame';
+import SpellingGame from '@/components/game-templates/SpellingGame';
 import QuizResults from '@/components/quiz/QuizResults';
 import QuizTimer from '@/components/quiz/QuizTimer';
 import QuizRulesModal from '@/components/quiz/QuizRulesModal';
@@ -604,6 +606,42 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
         );
     }
 
+    // Reading Comprehension quiz - contextual understanding
+    if (skill?.code === 'RF.ALL.4') {
+        return (
+            <div className="h-screen w-screen overflow-hidden">
+                {/* Full screen reading comprehension game - no rules modal */}
+                {currentQuestion && (
+                    <ReadingComprehensionGame
+                        question={currentQuestion}
+                        onAnswer={handleAnswer}
+                        difficultyLevel={difficulty}
+                        showHint={false}
+                        isRulesModalOpen={false}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    // Spelling quiz - orthographic memory
+    if (skill?.code === 'RF.ALL.5') {
+        return (
+            <div className="h-screen w-screen overflow-hidden">
+                {/* Full screen spelling game - no rules modal */}
+                {currentQuestion && (
+                    <SpellingGame
+                        question={currentQuestion}
+                        onAnswer={handleAnswer}
+                        difficultyLevel={difficulty}
+                        showHint={false}
+                        isRulesModalOpen={false}
+                    />
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className="h-screen bg-gradient-to-br from-purple-200 via-pink-200 to-blue-200 overflow-hidden relative flex">
             {/* Floating Background Icons - Reduced for cleaner look */}
@@ -874,8 +912,28 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                                     case 'PUZZLE_JOIN':
                                         return <PuzzleJoinGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'FIND_THE_WORD':
+                                        // Check if this is the Reading Comprehension skill (RF.ALL.4)
+                                        if (skill?.code === 'RF.ALL.4') {
+                                            return <ReadingComprehensionGame
+                                                question={currentQuestion}
+                                                onAnswer={handleAnswer}
+                                                difficultyLevel={difficulty}
+                                                showHint={false}
+                                                isRulesModalOpen={showRulesModal}
+                                            />;
+                                        }
                                         return <FindTheWordGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'SEQUENCING':
+                                        // Check if this is the Spelling skill (RF.ALL.5)
+                                        if (skill?.code === 'RF.ALL.5') {
+                                            return <SpellingGame
+                                                question={currentQuestion}
+                                                onAnswer={handleAnswer}
+                                                difficultyLevel={difficulty}
+                                                showHint={false}
+                                                isRulesModalOpen={showRulesModal}
+                                            />;
+                                        }
                                         return <SequencingGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'ODD_ONE_OUT':
                                         return <OddOneOutGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;

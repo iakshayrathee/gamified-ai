@@ -51,14 +51,14 @@ export default function RecallGame({
     // Initialize TTS
     const { speak, stop } = useSpeech();
 
-    // Calculate tier based on performance
+    // Calculate tier based on performance (matches backend logic)
     const calculateTier = (accuracy: number, attempts: number): number | undefined => {
         if (attempts === 0) return undefined;
-        
+
         if (accuracy >= 80) return 1; // Independent / Grade-ready
-        if (accuracy >= 60) return 2; // Needs guided reinforcement  
-        if (accuracy >= 40) return 3; // High risk – intervention required
-        return 3; // Default to tier 3 for very low performance
+        if (accuracy >= 60) return 2; // Needs guided reinforcement (60-79%)
+        if (accuracy >= 40) return 2; // Still Tier 2 (40-59%)
+        return 3; // High risk – intervention required (<40%)
     };
 
     // Extract and shuffle options
@@ -73,7 +73,7 @@ export default function RecallGame({
                     originalIndex: index + 1
                 }))
             ];
-            
+
             // Shuffle options for random display
             const shuffled = [...options].sort(() => Math.random() - 0.5);
             setDraggedOptions(shuffled);
@@ -97,13 +97,13 @@ export default function RecallGame({
             const timer = setTimeout(() => {
                 speak(question.correctAnswer);
                 setHasPlayedAudio(true);
-                
+
                 // Show text prompt after audio plays
                 setTimeout(() => {
                     setShowTextPrompt(true);
                 }, 2000);
             }, 1000);
-            
+
             return () => clearTimeout(timer);
         }
     }, [question?.id, isRulesModalOpen, question?.correctAnswer, speak, hasPlayedAudio]);
@@ -144,7 +144,7 @@ export default function RecallGame({
             const wordAccuracy = Math.round((existingWord ? (existingWord.correctAttempts + 1) / (existingWord.attempts + 1) : 1) * 100);
             const totalAttempts = existingWord ? existingWord.attempts + 1 : 1;
             const calculatedTier = calculateTier(wordAccuracy, totalAttempts);
-            
+
             if (existingWord) {
                 existingWord.correctAttempts++;
                 existingWord.attempts++;
@@ -178,7 +178,7 @@ export default function RecallGame({
             const wordAccuracy = Math.round((existingWord ? existingWord.correctAttempts : 0) / (existingWord ? existingWord.attempts + 1 : 1) * 100);
             const totalAttempts = existingWord ? existingWord.attempts + 1 : 1;
             const calculatedTier = calculateTier(wordAccuracy, totalAttempts);
-            
+
             if (existingWord) {
                 existingWord.attempts++;
                 existingWord.totalTime += timeSeconds;
@@ -327,11 +327,10 @@ export default function RecallGame({
                                                     <XCircle className="w-5 h-5 text-red-600" />
                                                 )}
                                                 {wordAttempt.tier && (
-                                                    <div className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                                        wordAttempt.tier === 1 ? 'bg-green-100 text-green-700' :
-                                                        wordAttempt.tier === 2 ? 'bg-yellow-100 text-yellow-700' :
-                                                            'bg-red-100 text-red-700'
-                                                    }`}>
+                                                    <div className={`px-2 py-1 rounded-full text-xs font-bold ${wordAttempt.tier === 1 ? 'bg-green-100 text-green-700' :
+                                                            wordAttempt.tier === 2 ? 'bg-yellow-100 text-yellow-700' :
+                                                                'bg-red-100 text-red-700'
+                                                        }`}>
                                                         Tier {wordAttempt.tier}
                                                     </div>
                                                 )}
@@ -396,7 +395,7 @@ export default function RecallGame({
                                     {Math.floor((Date.now() - startTime) / 60000)}:{String(Math.floor(((Date.now() - startTime) % 60000) / 1000)).padStart(2, '0')}
                                 </span>
                             </div>
-                            
+
                             {gameMode === 'drag' && (
                                 <motion.button
                                     onClick={resetOptions}
@@ -417,7 +416,7 @@ export default function RecallGame({
                             >
                                 <Volume2 className="w-5 h-5" />
                             </motion.button>
-                            
+
                             {wrongAttempts > 0 && (
                                 <div className="text-sm font-semibold text-red-600">
                                     Attempts: {wrongAttempts}/3
@@ -550,8 +549,8 @@ export default function RecallGame({
                                         const showAsWrong = isFirst && showFeedback === 'incorrect';
 
                                         // Determine base styles
-                                        let cardStyle = isFirst 
-                                            ? "bg-gradient-to-br from-yellow-100 to-yellow-200 shadow-xl border-4 border-yellow-400" 
+                                        let cardStyle = isFirst
+                                            ? "bg-gradient-to-br from-yellow-100 to-yellow-200 shadow-xl border-4 border-yellow-400"
                                             : "bg-gradient-to-br from-white to-purple-50 shadow-xl border-4 border-purple-300";
 
                                         if (showAsCorrect) {
@@ -637,7 +636,7 @@ export default function RecallGame({
                                     })}
                                 </AnimatePresence>
                             </Reorder.Group>
-                            
+
                             <div className="mt-4 text-center">
                                 <p className="text-sm text-gray-600">
                                     Drag the word you heard to the top position

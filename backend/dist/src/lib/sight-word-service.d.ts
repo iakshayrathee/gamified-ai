@@ -15,7 +15,7 @@ export interface ErrorPatterns {
 }
 export declare class SightWordService {
     /**
-     * Calculate tier based on accuracy percentage
+     * Calculate tier classification based on accuracy percentage
      * Tier 1 (≥80%): Independent / Grade-ready
      * Tier 2 (60-79%): Needs guided reinforcement
      * Tier 3 (<40%): High risk - intervention required

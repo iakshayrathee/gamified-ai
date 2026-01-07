@@ -553,7 +553,8 @@ app.post('/api/attempts', async (req, res) => {
                 microSkill: true
             }
         });
-        // Calculate tier for Reading Foundation Recognition stage (RF.ALL.1)
+        // Calculate tier for Reading Foundation Recognition stage (RF.ALL.1) ONLY
+        // This is the baseline diagnostic signal
         let tierInfo = null;
         if (updatedProgress.microSkill.code === 'RF.ALL.1') {
             // Get the question to extract the word
@@ -610,39 +611,39 @@ app.post('/api/attempts', async (req, res) => {
                         tierLabel: wordTier.label
                     }
                 });
-                // Calculate overall tier across all words attempted so far
-                if (newTotalAttempts >= 10) {
-                    const allWordMastery = await prisma.wordMastery.findMany({
-                        where: { childId, microSkillId }
-                    });
-                    const overallTier = SightWordService.calculateOverallTier(allWordMastery);
-                    const errorPatterns = SightWordService.analyzeErrorPatterns(recentAttempts);
-                    const riskIndicator = SightWordService.calculateRiskIndicator(errorPatterns, overallTier.tier);
-                    // Store tier information in aiInsights
-                    const aiInsights = {
-                        tier: overallTier.tier,
-                        tierLabel: overallTier.label,
-                        tierEmoji: overallTier.emoji,
-                        tierDescription: overallTier.description,
-                        errorPatterns,
-                        riskIndicator,
-                        wordsAttempted: allWordMastery.length,
-                        wordsMastered: allWordMastery.filter(wm => wm.tier === 1).length,
-                        calculatedAt: new Date().toISOString()
-                    };
-                    await prisma.skillProgress.update({
-                        where: {
-                            childId_microSkillId: {
-                                childId,
-                                microSkillId,
-                            }
-                        },
-                        data: {
-                            aiInsights: JSON.stringify(aiInsights)
+                // Calculate overall tier from FIRST attempt (removed 10-attempt restriction)
+                // This provides immediate diagnostic feedback
+                const allWordMastery = await prisma.wordMastery.findMany({
+                    where: { childId, microSkillId }
+                });
+                const overallTier = SightWordService.calculateOverallTier(allWordMastery);
+                const errorPatterns = SightWordService.analyzeErrorPatterns(recentAttempts);
+                const riskIndicator = SightWordService.calculateRiskIndicator(errorPatterns, overallTier.tier);
+                // Store tier information in aiInsights (baseline diagnostic)
+                const aiInsights = {
+                    tier: overallTier.tier,
+                    tierLabel: overallTier.label,
+                    tierEmoji: overallTier.emoji,
+                    tierDescription: overallTier.description,
+                    errorPatterns,
+                    riskIndicator,
+                    wordsAttempted: allWordMastery.length,
+                    wordsMastered: allWordMastery.filter(wm => wm.tier === 1).length,
+                    calculatedAt: new Date().toISOString(),
+                    isBaselineDiagnostic: true // Mark as baseline from Recognition stage
+                };
+                await prisma.skillProgress.update({
+                    where: {
+                        childId_microSkillId: {
+                            childId,
+                            microSkillId,
                         }
-                    });
-                    tierInfo = overallTier;
-                }
+                    },
+                    data: {
+                        aiInsights: JSON.stringify(aiInsights)
+                    }
+                });
+                tierInfo = overallTier;
             }
         }
         res.json({

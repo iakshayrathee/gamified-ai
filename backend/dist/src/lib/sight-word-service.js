@@ -5,7 +5,7 @@ const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 class SightWordService {
     /**
-     * Calculate tier based on accuracy percentage
+     * Calculate tier classification based on accuracy percentage
      * Tier 1 (≥80%): Independent / Grade-ready
      * Tier 2 (60-79%): Needs guided reinforcement
      * Tier 3 (<40%): High risk - intervention required
@@ -24,16 +24,25 @@ class SightWordService {
             return {
                 tier: 2,
                 label: 'Needs guided reinforcement',
-                emoji: '🌟',
-                description: 'Good progress! Needs more practice',
+                emoji: '📚',
+                description: 'Progressing well, needs more practice',
+                color: 'yellow'
+            };
+        }
+        else if (accuracy >= 40) {
+            return {
+                tier: 2,
+                label: 'Needs guided reinforcement',
+                emoji: '📚',
+                description: 'Needs additional support and practice',
                 color: 'yellow'
             };
         }
         else {
             return {
                 tier: 3,
-                label: 'High risk - intervention required',
-                emoji: '⚠️',
+                label: 'High risk – intervention required',
+                emoji: '🚨',
                 description: 'Requires immediate intervention and support',
                 color: 'red'
             };

@@ -128,10 +128,7 @@ class DocumentProcessor {
      * Extract questions using AI
      */
     async extractQuestions(text) {
-        console.log('📄 Extracted text length:', text.length);
-        console.log('📄 First 500 characters:', text.substring(0, 500));
         if (!text || text.trim().length < 10) {
-            console.warn('⚠️ Text too short or empty, skipping AI extraction');
             return [];
         }
         const systemPrompt = `You are an expert at extracting educational questions from documents.

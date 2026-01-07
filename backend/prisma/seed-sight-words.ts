@@ -390,13 +390,17 @@ async function main() {
         }
         console.log(`  ✅ Created ${dolchWords.length} recall questions`);
 
-        // Reading - 80 questions
-        console.log('  Stage 4: Reading (Find the Word)');
+        // Reading - 80 questions (Enhanced with contextual sentences)
+        console.log('  Stage 4: Reading Comprehension (Sight Word in Context)');
         for (let wordIndex = 0; wordIndex < dolchWords.length; wordIndex++) {
             const word = dolchWords[wordIndex];
             const sentence = generateSentence(word);
             const otherWords = dolchWords.filter(w => w !== word);
             const distractors = otherWords.sort(() => Math.random() - 0.5).slice(0, 3);
+
+            // Generate picture URL for Tier 2 support (contextual image)
+            const pictureUrl = `https://dummyimage.com/400x300/${wordIndex < 20 ? '4a90e2' : wordIndex < 40 ? '50c878' : wordIndex < 60 ? 'ff6b6b' : 'ffa500'
+                }/ffffff&text=${encodeURIComponent(word)}`;
 
             await prisma.question.create({
                 data: {
@@ -406,29 +410,45 @@ async function main() {
                     correctAnswer: word,
                     distractors: JSON.stringify(distractors),
                     hasConfusingDistractors: false,
-                    assetUrls: JSON.stringify({})
+                    assetUrls: JSON.stringify({
+                        sentence: sentence,
+                        pictureUrl: pictureUrl,  // For Tier 2
+                        useTTS: true,            // For Tier 3 - use Text-to-Speech
+                        blankPosition: sentence.indexOf('___')
+                    })
                 }
             });
             questionCount++;
         }
-        console.log(`  ✅ Created ${dolchWords.length} reading questions`);
+        console.log(`  ✅ Created ${dolchWords.length} reading comprehension questions`);
 
-        // Spelling - 80 questions
-        console.log('  Stage 5: Spelling (Sequencing)');
+        // Spelling - 80 questions (Enhanced with drag/fill modes)
+        console.log('  Stage 5: Spelling (Orthographic Memory)');
         for (let wordIndex = 0; wordIndex < dolchWords.length; wordIndex++) {
             const word = dolchWords[wordIndex];
             const jumbledLetters = word.split('').sort(() => Math.random() - 0.5);
+
+            // Determine mode: shorter words use drag, longer words can use fill
+            const mode = word.length <= 3 ? 'drag' : (Math.random() > 0.6 ? 'fill' : 'drag');
+            const missingLetterIndex = mode === 'fill' ? Math.floor(word.length / 2) : null;
 
             await prisma.question.create({
                 data: {
                     microSkillId: skills[4].id,
                     difficultyLevel: wordIndex < 27 ? 1 : wordIndex < 54 ? 2 : 3,
-                    promptText: `Arrange the letters to spell the word`,
+                    promptText: mode === 'drag'
+                        ? `Arrange the letters to spell the word`
+                        : `Fill in the missing letter to spell the word`,
                     correctAnswer: word,
                     distractors: JSON.stringify(jumbledLetters),
                     hasConfusingDistractors: false,
                     assetUrls: JSON.stringify({
-                        hint: word[0]
+                        jumbledLetters: jumbledLetters,
+                        correctWord: word,
+                        firstLetterHint: word[0],  // For Tier 2 and 3
+                        useTTS: true,              // For Tier 3 - pronounce the word
+                        mode: mode,
+                        missingLetterIndex: missingLetterIndex
                     })
                 }
             });

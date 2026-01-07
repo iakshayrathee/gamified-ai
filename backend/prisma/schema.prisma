@@ -373,6 +373,9 @@ enum ErrorType {
   VOWEL_ERROR
   WRONG_SOUND
   SEQUENCING_ERROR
+  CONTEXTUAL_ERROR      // Wrong word but grammatically correct (Reading stage)
+  SPELLING_REVERSAL     // Letter order errors (Spelling stage)
+  SPELLING_OMISSION     // Missing letters (Spelling stage)
   OTHER
 }
 

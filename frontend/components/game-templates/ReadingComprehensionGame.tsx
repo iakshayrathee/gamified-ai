@@ -1,18 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Volume2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import ShakeAnimation from '@/components/ui/ShakeAnimation';
 import { useSpeech } from '@/hooks/useSpeech';
 import { playCorrectSound, playIncorrectSound } from '@/lib/audioFeedback';
 import { BaseGameProps } from '@/lib/types/game.types';
-
-interface PictureOption {
-    id: string;
-    imageUrl: string;
-    word: string;
-}
 
 interface WordAttempt {
     word: string;
@@ -23,17 +17,26 @@ interface WordAttempt {
     tier?: number;
 }
 
-export default function PictureToWordGame({
+export default function ReadingComprehensionGame({
     question,
     onAnswer,
     difficultyLevel,
     showHint: shouldShowHint,
     isRulesModalOpen,
 }: BaseGameProps) {
-    const rawOptions = question.assetUrls?.options || [];
-    const options: PictureOption[] = rawOptions.map((opt: any, idx: number) =>
-        typeof opt === 'string' ? { id: String(idx), word: opt, imageUrl: '' } : opt
-    );
+    // Extract data from question
+    const assetData = (question.assetUrls as any) || {};
+    const sentence = assetData.sentence || question.promptText;
+    const pictureUrl = assetData.pictureUrl;
+    const useTTS = assetData.useTTS || false;
+
+    // Parse distractors - use useMemo to prevent re-shuffling on every render
+    const options = useMemo(() => {
+        const rawDistractors = typeof question.distractors === 'string'
+            ? JSON.parse(question.distractors)
+            : question.distractors || [];
+        return [question.correctAnswer, ...rawDistractors].sort(() => Math.random() - 0.5);
+    }, [question.id, question.correctAnswer, question.distractors]);
 
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [showFeedback, setShowFeedback] = useState<'correct' | 'incorrect' | null>(null);
@@ -41,14 +44,15 @@ export default function PictureToWordGame({
     const [questionStartTime, setQuestionStartTime] = useState(Date.now());
     const [wordHistory, setWordHistory] = useState<WordAttempt[]>([]);
     const [currentWord, setCurrentWord] = useState<string>('');
-    const [currentTier, setCurrentTier] = useState<number | undefined>(undefined);
+    const [currentTier, setCurrentTier] = useState<number>(1);
+    const [wrongAttempts, setWrongAttempts] = useState(0);
 
     // Initialize TTS
     const { speak, stop } = useSpeech();
 
     // Calculate tier based on performance (matches backend logic)
-    const calculateTier = (accuracy: number, attempts: number): number | undefined => {
-        if (attempts === 0) return undefined;
+    const calculateTier = (accuracy: number, attempts: number): number => {
+        if (attempts === 0) return 1;
 
         if (accuracy >= 80) return 1; // Independent / Grade-ready
         if (accuracy >= 60) return 2; // Needs guided reinforcement (60-79%)
@@ -62,26 +66,22 @@ export default function PictureToWordGame({
         setShowFeedback(null);
         setQuestionStartTime(Date.now());
         setCurrentWord(question?.correctAnswer || '');
+        setWrongAttempts(0);
         stop();
     }, [question?.id, stop, question?.correctAnswer]);
 
-    // Auto-play word audio
-    useEffect(() => {
-        if (!isRulesModalOpen && question?.correctAnswer) {
-            speak(question.correctAnswer);
-        }
-    }, [question?.id, isRulesModalOpen, question?.correctAnswer, speak]);
-
-    const playAudio = (text?: string) => {
-        if (text) {
-            speak(text);
+    const playAudio = () => {
+        // Spell the question sentence with 'blank' for the missing word
+        if (useTTS && sentence) {
+            const questionToSpeak = sentence.replace('___', 'blank');
+            speak(questionToSpeak);
         }
     };
 
-    const handleOptionClick = (optionId: string, word: string) => {
+    const handleOptionClick = (word: string) => {
         if (showFeedback) return;
 
-        setSelectedOption(optionId);
+        setSelectedOption(word);
         const isCorrect = word === question?.correctAnswer;
         const timeSeconds = (Date.now() - questionStartTime) / 1000;
 
@@ -113,6 +113,8 @@ export default function PictureToWordGame({
                 }]);
             }
 
+            setCurrentTier(calculatedTier);
+
             // Move to next question after brief delay
             setTimeout(() => {
                 setShowFeedback(null);
@@ -121,6 +123,7 @@ export default function PictureToWordGame({
         } else {
             playIncorrectSound();
             setShowFeedback('incorrect');
+            setWrongAttempts(prev => prev + 1);
 
             // Update word history
             const existingWord = wordHistory.find(w => w.word === currentWord);
@@ -145,11 +148,21 @@ export default function PictureToWordGame({
                 }]);
             }
 
-            // Clear feedback and allow retry
-            setTimeout(() => {
-                setShowFeedback(null);
-                setSelectedOption(null);
-            }, 500);
+            setCurrentTier(calculatedTier);
+
+            // After 3 wrong attempts, move to next question
+            if (wrongAttempts + 1 >= 3) {
+                setTimeout(() => {
+                    setShowFeedback(null);
+                    onAnswer(false, timeSeconds, false, word);
+                }, 800);
+            } else {
+                // Clear feedback and allow retry
+                setTimeout(() => {
+                    setShowFeedback(null);
+                    setSelectedOption(null);
+                }, 500);
+            }
         }
     };
 
@@ -174,16 +187,16 @@ export default function PictureToWordGame({
 
     return (
         <div className="relative w-full h-full flex bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 rounded-3xl overflow-hidden">
-            {/* Exit Button */}
+            {/* Exit Button - Top Right with spacing */}
             <motion.button
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="absolute top-6 right-6 z-50 bg-white/50 backdrop-blur-sm p-3 rounded-full text-purple-800 hover:bg-red-100 hover:text-red-600 transition-colors shadow-sm"
+                className="absolute top-4 right-4 z-50 bg-red-500/90 backdrop-blur-sm p-2 rounded-full text-white hover:bg-red-600 transition-colors shadow-lg"
                 onClick={() => window.history.back()}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
             >
-                <XCircle className="w-8 h-8" />
+                <XCircle className="w-6 h-6" />
             </motion.button>
 
             {/* LEFT SIDEBAR - Statistics */}
@@ -215,6 +228,13 @@ export default function PictureToWordGame({
                         <div className="flex justify-between items-center">
                             <span className="text-sm text-gray-600">Avg Time:</span>
                             <span className="font-bold text-orange-600">{avgResponseTime}s</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">Current Tier:</span>
+                            <span className={`font-bold ${currentTier === 1 ? 'text-green-600' :
+                                currentTier === 2 ? 'text-yellow-600' :
+                                    'text-red-600'
+                                }`}>Tier {currentTier}</span>
                         </div>
                     </div>
                 </div>
@@ -253,8 +273,8 @@ export default function PictureToWordGame({
                                                 )}
                                                 {wordAttempt.tier && (
                                                     <div className={`px-2 py-1 rounded-full text-xs font-bold ${wordAttempt.tier === 1 ? 'bg-green-100 text-green-700' :
-                                                            wordAttempt.tier === 2 ? 'bg-yellow-100 text-yellow-700' :
-                                                                'bg-red-100 text-red-700'
+                                                        wordAttempt.tier === 2 ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-red-100 text-red-700'
                                                         }`}>
                                                         Tier {wordAttempt.tier}
                                                     </div>
@@ -284,37 +304,65 @@ export default function PictureToWordGame({
             </motion.div>
 
             {/* MAIN CONTENT AREA */}
-            <div className="flex-1 flex flex-col p-4 overflow-hidden relative">
-                {/* Word prompt at top */}
+            <div className="flex-1 flex flex-col p-6 overflow-hidden relative">
+                {/* Sentence prompt at top */}
+                {/* Sentence prompt - More compact */}
                 <motion.div
                     initial={{ y: -50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    className="flex-shrink-0 mb-2"
+                    className="flex-shrink-0 mb-6 mt-4"
                 >
-                    <div className="bg-white/90 backdrop-blur-sm rounded-xl px-2 py-1 shadow-lg flex items-center justify-between max-w-xl mx-auto">
-                        <div className="flex-1 text-center">
-                            <h2 className="text-3xl font-bold text-purple-800 mb-1">
-                                {question?.correctAnswer}
+                    <div className="bg-white/90 backdrop-blur-sm rounded-2xl px-6 py-4 shadow-xl">
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="text-xl font-bold text-purple-800">
+                                Complete the sentence:
                             </h2>
-                            <p className="text-lg text-gray-600">Select matching picture</p>
+                            <div className="flex items-center gap-2">
+                                {/* Timer */}
+                                <div className="flex items-center gap-1 bg-blue-100 px-3 py-1.5 rounded-xl">
+                                    <Clock className="w-4 h-4 text-blue-600" />
+                                    <span className="font-bold text-blue-800 text-sm">
+                                        {Math.floor((Date.now() - startTime) / 60000)}:{String(Math.floor(((Date.now() - startTime) % 60000) / 1000)).padStart(2, '0')}
+                                    </span>
+                                </div>
+
+                                {/* Audio button */}
+                                {useTTS && (
+                                    <motion.button
+                                        onClick={playAudio}
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        className="bg-purple-500 text-white rounded-full p-2 shadow-lg hover:bg-purple-600 transition-colors"
+                                    >
+                                        <Volume2 className="w-5 h-5" />
+                                    </motion.button>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {/* Timer */}
-                            <div className="flex items-center gap-2 bg-blue-100 px-4 py-2 rounded-xl">
-                                <Clock className="w-5 h-5 text-blue-600" />
-                                <span className="font-bold text-blue-800">
-                                    {Math.floor((Date.now() - startTime) / 60000)}:{String(Math.floor(((Date.now() - startTime) % 60000) / 1000)).padStart(2, '0')}
+
+                        {/* Sentence with blank */}
+                        <p className="text-3xl font-bold text-gray-800 text-center mb-4">
+                            {sentence}
+                        </p>
+
+                        {/* Picture hint for Tier 2 and 3 */}
+                        {(currentTier === 2 || currentTier === 3) && pictureUrl && (
+                            <div className="flex justify-center mt-4">
+                                <img
+                                    src={pictureUrl}
+                                    alt="hint"
+                                    className="w-48 h-36 object-contain rounded-lg shadow-md"
+                                />
+                            </div>
+                        )}
+
+                        {wrongAttempts > 0 && (
+                            <div className="text-center mt-2">
+                                <span className="text-sm font-semibold text-red-600">
+                                    Attempts: {wrongAttempts}/3
                                 </span>
                             </div>
-                            <motion.button
-                                onClick={() => playAudio(question?.correctAnswer)}
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.95 }}
-                                className="bg-purple-500 text-white rounded-full p-2 shadow-md hover:bg-purple-600 transition-colors"
-                            >
-                                <Volume2 className="w-5 h-5" />
-                            </motion.button>
-                        </div>
+                        )}
                     </div>
                 </motion.div>
 
@@ -339,16 +387,15 @@ export default function PictureToWordGame({
                     )}
                 </AnimatePresence>
 
-                {/* Picture options grid with responsive sizing */}
-                <div className="flex-1 flex items-center justify-center p-1">
-                    <div className="grid grid-cols-2 gap-3 w-full max-w-4xl h-full max-h-[75vh] min-h-[400px] p-2">
-                        {options?.map((option, index) => {
-                            const isSelected = selectedOption === option.id;
-                            const isCorrect = option.word === question?.correctAnswer;
+                {/* Word options */}
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="grid grid-cols-2 gap-4 w-full max-w-3xl">
+                        {options.map((option, index) => {
+                            const isSelected = selectedOption === option;
+                            const isCorrect = option === question?.correctAnswer;
                             const showAsCorrect = isSelected && showFeedback === 'correct';
                             const showAsWrong = isSelected && showFeedback === 'incorrect';
 
-                            // Determine base styles
                             let cardStyle = "bg-gradient-to-br from-white to-purple-50 shadow-xl border-4 border-purple-300 hover:from-purple-50 hover:to-purple-100";
 
                             if (showAsCorrect) {
@@ -361,36 +408,29 @@ export default function PictureToWordGame({
 
                             return (
                                 <ShakeAnimation
-                                    key={`shake-${option.id}`}
+                                    key={`shake-${option}`}
                                     trigger={showAsWrong}
                                     intensity="medium"
                                     className="w-full h-full"
                                 >
                                     <motion.button
-                                        key={option.id}
+                                        key={option}
                                         initial={{ opacity: 0, scale: 0.8 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ delay: index * 0.1 }}
-                                        whileHover={{ scale: !showFeedback ? 1.02 : 1 }}
-                                        whileTap={{ scale: !showFeedback ? 0.98 : 1 }}
-                                        onClick={() => handleOptionClick(option.id, option.word)}
+                                        whileHover={{ scale: !showFeedback ? 1.05 : 1 }}
+                                        whileTap={{ scale: !showFeedback ? 0.95 : 1 }}
+                                        onClick={() => handleOptionClick(option)}
                                         disabled={!!showFeedback}
                                         className={`
-                                            relative w-full h-full rounded-xl
+                                            relative w-full h-32 p-6 rounded-xl
                                             transition-all duration-300 transform flex items-center justify-center
-                                            min-h-0 min-w-0 overflow-hidden
                                             ${cardStyle}
                                         `}
                                     >
-                                        {/* Picture with better overflow handling */}
-                                        <div className="w-full h-full flex items-center justify-center overflow-hidden rounded-lg bg-white/20 min-h-0">
-                                            <img
-                                                src={option.imageUrl}
-                                                alt={option.word}
-                                                className="w-full h-full object-contain"
-                                                style={{ maxHeight: '75%', maxWidth: '75%' }}
-                                            />
-                                        </div>
+                                        <span className="text-3xl font-bold text-purple-800">
+                                            {option}
+                                        </span>
 
                                         {/* Feedback Icons */}
                                         {showAsCorrect && (
@@ -399,7 +439,7 @@ export default function PictureToWordGame({
                                                 animate={{ scale: 1, rotate: 0 }}
                                                 transition={{ type: "spring" }}
                                             >
-                                                <CheckCircle className="absolute top-2 left-2 w-8 h-8 text-white drop-shadow-lg" />
+                                                <CheckCircle className="absolute top-2 right-2 w-8 h-8 text-white drop-shadow-lg" />
                                             </motion.div>
                                         )}
                                         {showAsWrong && (
@@ -408,7 +448,7 @@ export default function PictureToWordGame({
                                                 animate={{ scale: 1, rotate: 0 }}
                                                 transition={{ type: "spring" }}
                                             >
-                                                <XCircle className="absolute top-2 left-2 w-8 h-8 text-white drop-shadow-lg" />
+                                                <XCircle className="absolute top-2 right-2 w-8 h-8 text-white drop-shadow-lg" />
                                             </motion.div>
                                         )}
                                     </motion.button>
