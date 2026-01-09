@@ -30,6 +30,10 @@ export default function FlashcardRecognitionGame({
     const [wordHistory, setWordHistory] = useState<WordAttempt[]>([]);
     const [showFeedback, setShowFeedback] = useState<'correct' | 'incorrect' | null>(null);
     const [currentWord, setCurrentWord] = useState<string>('');
+    const [allListWords, setAllListWords] = useState<string[]>([]);
+    const [recognizedWords, setRecognizedWords] = useState<Set<string>>(new Set());
+    const [wordPool, setWordPool] = useState<string[]>([]);
+    const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
 
     const { speak, stop } = useSpeech();
 
@@ -43,26 +47,89 @@ export default function FlashcardRecognitionGame({
         return shuffled;
     };
 
-    // Extract and shuffle options from question - ensures all options are shuffled
+    // Initialize word pool and display first 4 cards
     useEffect(() => {
+        console.log('[FlashcardGame] Question changed:', {
+            questionId: question?.id,
+            hasAssetUrls: !!question?.assetUrls,
+            assetUrlsType: typeof question?.assetUrls,
+            correctAnswer: question?.correctAnswer,
+            distractors: question?.distractors,
+            distractorsType: typeof question?.distractors
+        });
+
+        // Parse distractors if they're a JSON string
+        let parsedDistractors: string[] = [];
+        if (question?.distractors) {
+            if (Array.isArray(question.distractors)) {
+                parsedDistractors = question.distractors;
+            } else if (typeof question.distractors === 'string') {
+                try {
+                    parsedDistractors = JSON.parse(question.distractors);
+                } catch (e) {
+                    console.error('[FlashcardGame] Failed to parse distractors:', e);
+                    parsedDistractors = [];
+                }
+            }
+        }
+
         if (question?.assetUrls && typeof question.assetUrls === 'object') {
             const assetData = question.assetUrls as any;
-            const wordIndex = assetData.wordIndex || 0;
-            const allWords = assetData.cumulativeWords || [];
+            console.log('[FlashcardGame] Asset data:', {
+                displayMode: assetData.displayMode,
+                hasListWords: !!assetData.listWords,
+                listWordsLength: assetData.listWords?.length
+            });
 
-            const numOptions = Math.min((wordIndex + 1) * 2, 80);
-            const options = allWords.slice(0, numOptions);
-            // Always shuffle all options to ensure random order every time
+            // For new 4-card flashcard mode
+            if (assetData.displayMode === 'flashcard-4' && assetData.listWords) {
+                const listWords = assetData.listWords as string[];
+                console.log('[FlashcardGame] Initializing 4-card mode with', listWords.length, 'words');
+                setAllListWords(listWords);
+
+                // CRITICAL: Use distractors + correctAnswer to ensure correct answer is in the 4 cards
+                if (parsedDistractors.length >= 3) {
+                    const options = [question.correctAnswer, ...parsedDistractors.slice(0, 3)];
+                    const shuffledOptions = shuffleArray(options);
+                    setAvailableOptions(shuffledOptions);
+                    setCurrentWord(question.correctAnswer);
+
+                    console.log('[FlashcardGame] Initialized with distractors:', {
+                        options: shuffledOptions,
+                        correctAnswer: question.correctAnswer,
+                        distractors: parsedDistractors
+                    });
+                } else {
+                    // Fallback: use first 4 words from list if distractors are missing
+                    console.warn('[FlashcardGame] Not enough distractors, using list words');
+                    const options = listWords.slice(0, 4);
+                    const shuffledOptions = shuffleArray(options);
+                    setAvailableOptions(shuffledOptions);
+                    setCurrentWord(question.correctAnswer);
+                }
+            } else {
+                // Fallback for old progressive mode (backward compatibility)
+                console.log('[FlashcardGame] Using fallback mode');
+                const wordIndex = assetData.wordIndex || 0;
+                const allWords = assetData.cumulativeWords || [];
+                const numOptions = Math.min((wordIndex + 1) * 2, 80);
+                const options = allWords.slice(0, numOptions);
+                const shuffledOptions = shuffleArray(options);
+                setAvailableOptions(shuffledOptions);
+                setCurrentWord(question.correctAnswer);
+            }
+        } else if (parsedDistractors.length > 0) {
+            // Handle case where options come from distractors only
+            console.log('[FlashcardGame] Using distractors-only mode');
+            const options = [question.correctAnswer, ...parsedDistractors.slice(0, 3)];
             const shuffledOptions = shuffleArray(options);
-
             setAvailableOptions(shuffledOptions);
             setCurrentWord(question.correctAnswer);
-        } else if (question?.distractors) {
-            // Handle case where options come from distractors
-            const options = [question.correctAnswer, ...question.distractors];
-            const shuffledOptions = shuffleArray(options);
-            setAvailableOptions(shuffledOptions);
-            setCurrentWord(question.correctAnswer);
+        } else {
+            // CRITICAL: Prevent blank screen - set minimal fallback
+            console.error('[FlashcardGame] No valid question data found! Using emergency fallback', question);
+            setAvailableOptions([question?.correctAnswer || 'ERROR']);
+            setCurrentWord(question?.correctAnswer || 'ERROR');
         }
 
         stop();
@@ -103,9 +170,15 @@ export default function FlashcardRecognitionGame({
                 }]);
             }
 
+            // Mark word as recognized
+            const newRecognizedWords = new Set(recognizedWords);
+            newRecognizedWords.add(word);
+            setRecognizedWords(newRecognizedWords);
+
             // Move to next question after brief delay
             setTimeout(() => {
                 setShowFeedback(null);
+                // Call onAnswer to load next question from backend
                 onAnswer(true, responseTime, false, word);
             }, 800);
         } else {
@@ -130,12 +203,15 @@ export default function FlashcardRecognitionGame({
                 }]);
             }
 
-            // After 3 wrong attempts, move to next question
+            // After 3 wrong attempts, show correct answer then move to next question
             if (wrongAttempts + 1 >= 3) {
+                // Show correct answer
+                setShowCorrectAnswer(true);
                 setTimeout(() => {
                     setShowFeedback(null);
+                    setShowCorrectAnswer(false);
                     onAnswer(false, responseTime, false, word);
-                }, 800);
+                }, 2000); // Show for 2 seconds
             } else {
                 // Clear feedback after short delay
                 setTimeout(() => {
@@ -145,8 +221,18 @@ export default function FlashcardRecognitionGame({
         }
     };
 
-    // Calculate grid layout - tighter spacing
-    const getGridCols = (count: number) => {
+    // Fixed 4-card layout for new flashcard mode
+    const isNewFlashcardMode = question?.assetUrls &&
+        typeof question.assetUrls === 'object' &&
+        (question.assetUrls as any).displayMode === 'flashcard-4';
+
+    // For 4-card mode: fixed 2x2 grid, landscape cards (4:3 ratio)
+    // For legacy mode: keep dynamic sizing
+    const gridCols = isNewFlashcardMode ? 'grid-cols-2' : getGridCols(availableOptions.length);
+    const cardSize = isNewFlashcardMode ? 'w-[384px] h-[288px]' : getCardSize(availableOptions.length); // 4:3 ratio (landscape)
+
+    // Calculate grid layout for legacy mode
+    function getGridCols(count: number) {
         if (count <= 2) return 'grid-cols-2';
         if (count <= 6) return 'grid-cols-3';
         if (count <= 12) return 'grid-cols-4';
@@ -154,9 +240,9 @@ export default function FlashcardRecognitionGame({
         if (count <= 30) return 'grid-cols-6';
         if (count <= 50) return 'grid-cols-7';
         return 'grid-cols-8';
-    };
+    }
 
-    const getCardSize = (count: number) => {
+    function getCardSize(count: number) {
         if (count <= 2) return 'w-48 h-64';
         if (count <= 6) return 'w-44 h-56';
         if (count <= 12) return 'w-40 h-52';
@@ -164,12 +250,8 @@ export default function FlashcardRecognitionGame({
         if (count <= 30) return 'w-32 h-44';
         if (count <= 40) return 'w-28 h-40';
         if (count <= 50) return 'w-24 h-36';
-        // For more than 50 options, use minimum child-friendly size (similar to 8-option layout)
         return 'w-32 h-44 min-w-32 min-h-44';
-    };
-
-    const cardSize = getCardSize(availableOptions.length);
-    const gridCols = getGridCols(availableOptions.length);
+    }
 
     // Calculate statistics
     const totalWords = wordHistory.length;
@@ -291,7 +373,11 @@ export default function FlashcardRecognitionGame({
 
                             {/* Exit Button */}
                             <motion.button
-                                onClick={() => window.location.href = '/child/domains'}
+                                onClick={() => {
+                                    // Navigate back to Reading Foundation domain
+                                    // Extract domain ID from question data or use default
+                                    window.location.href = '/child/domains';
+                                }}
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 className="bg-red-500 text-white px-4 py-2 rounded-xl font-semibold shadow-lg hover:bg-red-600 transition-colors flex items-center gap-2"
@@ -338,9 +424,23 @@ export default function FlashcardRecognitionGame({
                     )}
                 </AnimatePresence>
 
-                {/* Flashcard grid with better scrolling for many options */}
-                <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-purple-300 scrollbar-track-transparent">
-                    <div className={`grid ${gridCols} gap-2 p-2 ${availableOptions.length > 50 ? 'grid-flow-dense' : ''}`}>
+                {/* Show Correct Answer After Wrong Attempts */}
+                {showCorrectAnswer && (
+                    <motion.div
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-600 px-16 py-8 rounded-3xl shadow-2xl z-50"
+                    >
+                        <div className="text-center">
+                            <p className="text-2xl text-white mb-4">The correct answer is:</p>
+                            <p className="text-6xl font-bold text-white">{question.correctAnswer}</p>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Flashcard grid - centered 2x2 layout for 4-card mode */}
+                <div className="flex-1 flex items-center justify-center overflow-y-auto scrollbar-thin scrollbar-thumb-purple-300 scrollbar-track-transparent">
+                    <div className={`grid ${gridCols} ${isNewFlashcardMode ? 'gap-6' : 'gap-2'} ${isNewFlashcardMode ? 'p-6' : 'p-2'} ${availableOptions.length > 50 && !isNewFlashcardMode ? 'grid-flow-dense' : ''}`}>
                         <AnimatePresence mode="sync">
                             {availableOptions.map((word, index) => (
                                 <motion.div
@@ -380,13 +480,14 @@ export default function FlashcardRecognitionGame({
                                                     className="text-center"
                                                 >
                                                     <div className={`
-                                                        font-bold text-purple-800 break-words px-1
-                                                        ${availableOptions.length <= 4 ? 'text-4xl' :
-                                                            availableOptions.length <= 12 ? 'text-3xl' :
-                                                                availableOptions.length <= 30 ? 'text-2xl' :
-                                                                    availableOptions.length <= 50 ? 'text-xl' :
-                                                                        availableOptions.length <= 80 ? 'text-lg' :
-                                                                            'text-base'
+                                                        font-bold text-purple-800 break-words
+                                                        ${isNewFlashcardMode ? 'text-7xl' :
+                                                            availableOptions.length <= 4 ? 'text-4xl' :
+                                                                availableOptions.length <= 12 ? 'text-3xl' :
+                                                                    availableOptions.length <= 30 ? 'text-2xl' :
+                                                                        availableOptions.length <= 50 ? 'text-xl' :
+                                                                            availableOptions.length <= 80 ? 'text-lg' :
+                                                                                'text-base'
                                                         }
                                                     `}>
                                                         {word}

@@ -2,21 +2,29 @@ import { PrismaClient, GameTemplate } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Dolch Sight Words - All 80 words
-const dolchWords = [
-    // List 1 (20 words)
+// Dolch Sight Words - Separated into 4 lists of 20 words each
+const dolchList1 = [
     'the', 'to', 'and', 'he', 'a', 'I', 'you', 'it', 'of', 'in',
-    'was', 'said', 'his', 'that', 'she', 'for', 'on', 'they', 'but', 'had',
-    // List 2 (20 words)
+    'was', 'said', 'his', 'that', 'she', 'for', 'on', 'they', 'but', 'had'
+];
+
+const dolchList2 = [
     'at', 'him', 'with', 'up', 'all', 'look', 'is', 'her', 'there', 'some',
-    'out', 'as', 'be', 'have', 'go', 'we', 'am', 'then', 'little', 'down',
-    // List 3 (20 words)
+    'out', 'as', 'be', 'have', 'go', 'we', 'am', 'then', 'little', 'down'
+];
+
+const dolchList3 = [
     'do', 'can', 'could', 'when', 'did', 'what', 'so', 'see', 'not', 'were',
-    'get', 'them', 'like', 'one', 'this', 'my', 'would', 'me', 'will', 'yes',
-    // List 4 (20 words)
+    'get', 'them', 'like', 'one', 'this', 'my', 'would', 'me', 'will', 'yes'
+];
+
+const dolchList4 = [
     'big', 'went', 'are', 'come', 'if', 'now', 'long', 'no', 'came', 'ask',
     'very', 'an', 'over', 'your', 'its', 'ride', 'into', 'just', 'blue', 'red'
 ];
+
+// Combined array for other stages (Meaning, Recall, Reading, Spelling)
+const dolchWords = [...dolchList1, ...dolchList2, ...dolchList3, ...dolchList4];
 
 // Picture URLs for Meaning stage (using dummyimage.com with color-coded backgrounds)
 const pictureUrls: Record<string, string> = {
@@ -266,29 +274,56 @@ async function main() {
         });
         console.log(`  ✅ Domain created: ${domain.name} (${domain.code}) - Order: ${domain.order}\n`);
 
-        // Create 5 unified micro-skills (one for each stage)
-        console.log('🎯 Creating 5 unified micro-skills for all 80 Dolch words...');
-        const stageNames = ['Recognition', 'Meaning', 'Recall', 'Reading', 'Spelling'];
-        const stageDescriptions = [
-            'Recognize sight words instantly',
-            'Match words to their meanings',
-            'Recall words from audio',
-            'Find words in sentences',
-            'Spell words correctly'
-        ];
+        // Create 4 Recognition skills + 4 Recall skills (one per Dolch list) + 3 unified skills for other stages
+        console.log('🎯 Creating Recognition and Recall skills for each Dolch list + unified skills for other stages...');
 
         const skills = [];
-        for (let i = 0; i < 5; i++) {
+
+        // Recognition skills - one per list
+        const recognitionSkills = [];
+        for (let listNum = 1; listNum <= 4; listNum++) {
             const skill = await prisma.microSkill.create({
                 data: {
-                    name: `${stageNames[i]} - All Dolch Words`,
-                    code: `RF.ALL.${i + 1}`,
+                    name: `Recognition - List ${listNum}`,
+                    code: `RF.${listNum}.1`,
                     domainId: domain.id,
-                    gameTemplate: i === 0 ? GameTemplate.TAP_SELECT :
-                        i === 1 ? GameTemplate.PICTURE_TO_WORD :
-                            i === 2 ? GameTemplate.AUDIO_TO_LETTER :
-                                i === 3 ? GameTemplate.FIND_THE_WORD :
-                                    GameTemplate.SEQUENCING,
+                    gameTemplate: GameTemplate.TAP_SELECT,
+                },
+            });
+            recognitionSkills.push(skill);
+            skills.push(skill);
+            console.log(`  ✅ ${skill.code}: ${skill.name}`);
+        }
+
+        // Recall skills - one per list (Stage 3)
+        const recallSkills = [];
+        for (let listNum = 1; listNum <= 4; listNum++) {
+            const skill = await prisma.microSkill.create({
+                data: {
+                    name: `Recall - List ${listNum}`,
+                    code: `RF.${listNum}.3`,
+                    domainId: domain.id,
+                    gameTemplate: GameTemplate.AUDIO_TO_LETTER,
+                },
+            });
+            recallSkills.push(skill);
+            skills.push(skill);
+            console.log(`  ✅ ${skill.code}: ${skill.name}`);
+        }
+
+        // Other stages - unified for all 80 words (Meaning, Reading, Spelling)
+        const unifiedStageNames = ['Meaning', 'Reading', 'Spelling'];
+        const unifiedStageCodes = [2, 4, 5]; // Stage numbers
+
+        for (let i = 0; i < 3; i++) {
+            const skill = await prisma.microSkill.create({
+                data: {
+                    name: `${unifiedStageNames[i]} - All Dolch Words`,
+                    code: `RF.ALL.${unifiedStageCodes[i]}`,
+                    domainId: domain.id,
+                    gameTemplate: i === 0 ? GameTemplate.PICTURE_TO_WORD :
+                        i === 1 ? GameTemplate.FIND_THE_WORD :
+                            GameTemplate.SEQUENCING,
                 },
             });
             skills.push(skill);
@@ -300,38 +335,42 @@ async function main() {
         console.log('❓ Creating questions for all skills...\n');
         let questionCount = 0;
 
-        // Recognition - 80 questions with progressive flashcard display
-        console.log('  Stage 1: Recognition (Progressive Flashcard Display)');
-        for (let wordIndex = 0; wordIndex < dolchWords.length; wordIndex++) {
-            const word = dolchWords[wordIndex];
-            // Progressive options: 2, 4, 6, 8, 10, ..., up to all 80 words
-            const numOptions = Math.min((wordIndex + 1) * 2, dolchWords.length);
-            const wordsToShow = dolchWords.slice(0, numOptions);
+        // Recognition - 80 questions total (20 per list × 4 lists)
+        console.log('  Stage 1: Recognition (4-Card Flashcard Display per List)');
+        const dolchLists = [dolchList1, dolchList2, dolchList3, dolchList4];
 
-            const distractors = wordsToShow
-                .filter(w => w !== word)
-                .sort(() => Math.random() - 0.5)
-                .slice(0, Math.min(3, wordsToShow.length - 1));
+        for (let listIndex = 0; listIndex < 4; listIndex++) {
+            const currentList = dolchLists[listIndex];
+            const skill = recognitionSkills[listIndex];
 
-            await prisma.question.create({
-                data: {
-                    microSkillId: skills[0].id,
-                    difficultyLevel: wordIndex < 27 ? 1 : wordIndex < 54 ? 2 : 3,
-                    promptText: `Find the word: "${word}"`,
-                    correctAnswer: word,
-                    distractors: JSON.stringify(distractors),
-                    hasConfusingDistractors: false,
-                    assetUrls: JSON.stringify({
-                        cumulativeWords: wordsToShow,
-                        wordIndex: wordIndex,
-                        totalWords: dolchWords.length,
-                        displayMode: 'flashcard'
-                    })
-                }
-            });
-            questionCount++;
+            for (let wordIndex = 0; wordIndex < currentList.length; wordIndex++) {
+                const word = currentList[wordIndex];
+
+                // For 4-card display, use the first 4 words as initial distractors
+                const otherWords = currentList.filter(w => w !== word);
+                const distractors = otherWords.slice(0, 3);
+
+                await prisma.question.create({
+                    data: {
+                        microSkillId: skill.id,
+                        difficultyLevel: 1, // All words in a list have same difficulty
+                        promptText: `Find the word: "${word}"`,
+                        correctAnswer: word,
+                        distractors: JSON.stringify(distractors),
+                        hasConfusingDistractors: false,
+                        assetUrls: JSON.stringify({
+                            listWords: currentList, // All 20 words in this list
+                            listNumber: listIndex + 1,
+                            displayMode: 'flashcard-4', // Show exactly 4 cards at a time
+                            totalWordsInList: currentList.length
+                        })
+                    }
+                });
+                questionCount++;
+            }
+            console.log(`    ✅ Created ${currentList.length} questions for List ${listIndex + 1}`);
         }
-        console.log(`  ✅ Created ${dolchWords.length} recognition questions with progressive flashcards`);
+        console.log(`  ✅ Total Recognition questions: ${questionCount}`);
 
         // Meaning - 80 questions
         console.log('  Stage 2: Meaning (Picture to Word)');
@@ -350,7 +389,8 @@ async function main() {
 
             await prisma.question.create({
                 data: {
-                    microSkillId: skills[1].id,
+                    // skills array: [RF.1.1, RF.2.1, RF.3.1, RF.4.1, RF.1.3, RF.2.3, RF.3.3, RF.4.3, RF.ALL.2, RF.ALL.4, RF.ALL.5]
+                    microSkillId: skills[8].id,  // RF.ALL.2 (Meaning) - index 8 after 4 Recognition + 4 Recall
                     difficultyLevel: wordIndex < 27 ? 1 : wordIndex < 54 ? 2 : 3,
                     promptText: `Which word matches this picture?`,
                     correctAnswer: word,
@@ -366,29 +406,37 @@ async function main() {
         }
         console.log(`  ✅ Created ${dolchWords.length} meaning questions`);
 
-        // Recall - 80 questions
-        console.log('  Stage 3: Recall (Audio to Word)');
-        for (let wordIndex = 0; wordIndex < dolchWords.length; wordIndex++) {
-            const word = dolchWords[wordIndex];
-            const otherWords = dolchWords.filter(w => w !== word);
-            const distractors = otherWords.sort(() => Math.random() - 0.5).slice(0, 3);
+        // Recall - 80 questions total (20 per list × 4 lists)
+        console.log('  Stage 3: Recall (Single-Card Reading per List)');
+        for (let listIndex = 0; listIndex < 4; listIndex++) {
+            const currentList = dolchLists[listIndex];
+            const skill = recallSkills[listIndex];
 
-            await prisma.question.create({
-                data: {
-                    microSkillId: skills[2].id,
-                    difficultyLevel: wordIndex < 27 ? 1 : wordIndex < 54 ? 2 : 3,
-                    promptText: `Listen and select the word you hear: "${word}"`,
-                    correctAnswer: word,
-                    distractors: JSON.stringify(distractors),
-                    hasConfusingDistractors: false,
-                    assetUrls: JSON.stringify({
-                        audio: `/assets/audio/sight-words/${word}.mp3`
-                    })
-                }
-            });
-            questionCount++;
+            for (let wordIndex = 0; wordIndex < currentList.length; wordIndex++) {
+                const word = currentList[wordIndex];
+
+                await prisma.question.create({
+                    data: {
+                        microSkillId: skill.id,  // RF.{listNum}.3
+                        difficultyLevel: 1, // All words in a list have same difficulty
+                        promptText: `Read the word aloud`,
+                        correctAnswer: word,
+                        distractors: JSON.stringify([]), // No distractors - child just reads the word
+                        hasConfusingDistractors: false,
+                        assetUrls: JSON.stringify({
+                            displayMode: 'single-card', // Show one card at a time
+                            listWords: currentList, // All 20 words in this list
+                            listNumber: listIndex + 1,
+                            cardOrientation: 'landscape', // 3x4 inch landscape card
+                            totalWordsInList: currentList.length
+                        })
+                    }
+                });
+                questionCount++;
+            }
+            console.log(`    ✅ Created ${currentList.length} recall questions for List ${listIndex + 1}`);
         }
-        console.log(`  ✅ Created ${dolchWords.length} recall questions`);
+        console.log(`  ✅ Total Recall questions: ${questionCount - 160}`);
 
         // Reading - 80 questions (Enhanced with contextual sentences)
         console.log('  Stage 4: Reading Comprehension (Sight Word in Context)');
@@ -404,7 +452,8 @@ async function main() {
 
             await prisma.question.create({
                 data: {
-                    microSkillId: skills[3].id,
+                    // skills array: [RF.1.1, RF.2.1, RF.3.1, RF.4.1, RF.1.3, RF.2.3, RF.3.3, RF.4.3, RF.ALL.2, RF.ALL.4, RF.ALL.5]
+                    microSkillId: skills[9].id,  // RF.ALL.4 (Reading) - index 9
                     difficultyLevel: wordIndex < 27 ? 1 : wordIndex < 54 ? 2 : 3,
                     promptText: sentence,
                     correctAnswer: word,
@@ -434,7 +483,8 @@ async function main() {
 
             await prisma.question.create({
                 data: {
-                    microSkillId: skills[4].id,
+                    // skills array: [RF.1.1, RF.2.1, RF.3.1, RF.4.1, RF.1.3, RF.2.3, RF.3.3, RF.4.3, RF.ALL.2, RF.ALL.4, RF.ALL.5]
+                    microSkillId: skills[10].id,  // RF.ALL.5 (Spelling) - index 10
                     difficultyLevel: wordIndex < 27 ? 1 : wordIndex < 54 ? 2 : 3,
                     promptText: mode === 'drag'
                         ? `Arrange the letters to spell the word`
@@ -459,13 +509,13 @@ async function main() {
         console.log('📋 SEED SUMMARY');
         console.log('=====================================');
         console.log(`Domain: ${domain.name} (${domain.code})`);
-        console.log(`Micro-Skills: ${skills.length} (5 unified stages)`);
-        console.log(`Questions: ${questionCount} (80 per skill)`);
+        console.log(`Micro-Skills: ${skills.length} (4 Recognition + 4 Recall + 3 Unified)`);
+        console.log(`Questions: ${questionCount} total`);
         console.log('');
         console.log('Skill Breakdown:');
-        console.log('  - Recognition: All 80 words with progressive flashcard display');
+        console.log('  - Recognition: 4 lists × 20 words (4-card flashcard display)');
+        console.log('  - Recall: 4 lists × 20 words (single-card reading)');
         console.log('  - Meaning: All 80 words with picture matching');
-        console.log('  - Recall: All 80 words with audio recognition');
         console.log('  - Reading: All 80 words in sentences');
         console.log('  - Spelling: All 80 words with letter sequencing');
         console.log('=====================================\n');

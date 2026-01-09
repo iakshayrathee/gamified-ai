@@ -56,7 +56,8 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
 
         const fetchReportData = async () => {
             console.log('Fetching report data...');
-            const recognitionSkill = skills.find((s: MicroSkill) => s.code === 'RF.ALL.1');
+            // Find any Recognition skill (list-based: RF.1.1, RF.2.1, RF.3.1, RF.4.1)
+            const recognitionSkill = skills.find((s: MicroSkill) => s.code.match(/^RF\.[1-4]\.1$/));
             if (!recognitionSkill) {
                 console.log('No recognition skill found');
                 return;
@@ -122,11 +123,16 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
 
     // Check if this is the Reading Foundation domain
     if (domainCode === 'RF') {
-        // Get all 5 unified skills
+        // Get all Recognition skills (list-based: RF.1.1, RF.2.1, RF.3.1, RF.4.1)
+        // Get all Recall skills (list-based: RF.1.3, RF.2.3, RF.3.3, RF.4.3)
+        // Get unified skills (RF.ALL.2, RF.ALL.4, RF.ALL.5)
+        const recognitionSkills = skills.filter(s => s.code.match(/^RF\.[1-4]\.1$/));
+        const recallSkills = skills.filter(s => s.code.match(/^RF\.[1-4]\.3$/));
         const unifiedSkills = skills.filter(s => s.code.startsWith('RF.ALL.'));
+        const allRFSkills = [...recognitionSkills, ...recallSkills, ...unifiedSkills];
 
         // Map skills to display format
-        const skillsToDisplay = unifiedSkills.map(skill => {
+        const skillsToDisplay = allRFSkills.map(skill => {
             const prog = skillProgress.find(sp => sp.microSkillId === skill.id);
 
             // Get tier from aiInsights if available
@@ -161,7 +167,7 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
             };
         });
 
-        // Sort by code to ensure correct order (RF.ALL.1, RF.ALL.2, etc.)
+        // Sort by code to ensure correct order
         skillsToDisplay.sort((a, b) => a.code.localeCompare(b.code));
 
         return (
@@ -219,184 +225,280 @@ export default function SkillSelectionPage({ params }: SkillSelectionPageProps) 
                             </div>
                         </motion.div>
 
-                        {/* Skills Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {skillsToDisplay.map((skill, index) => {
-                                const stageName = skill.name.split(' - ')[0];
-                                const stageIcons: Record<string, string> = {
-                                    'Recognition': '👁️',
-                                    'Meaning': '🖼️',
-                                    'Recall': '🎧',
-                                    'Reading': '📖',
-                                    'Spelling': '✍️'
-                                };
-                                const icon = stageIcons[stageName] || '🎮';
+                        {/* Skills Grid - Grouped Layout */}
+                        <div className="space-y-6">
+                            {/* Recognition Lists Group */}
+                            <div className="bg-white rounded-3xl p-6 shadow-xl">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <div className="text-5xl">👁️</div>
+                                    <div>
+                                        <h3 className="text-3xl font-bold text-purple-800">Recognition</h3>
+                                        <p className="text-gray-600">4 Lists × 20 Words Each</p>
+                                    </div>
+                                </div>
 
-                                return (
-                                    <motion.div
-                                        key={skill.id}
-                                        initial={{ scale: 0, rotate: -10 }}
-                                        animate={{ scale: 1, rotate: 0 }}
-                                        transition={{ delay: index * 0.1, type: 'spring' }}
-                                        whileHover={{ scale: 1.05, y: -5 }}
-                                        className="bg-white rounded-3xl p-8 shadow-xl relative overflow-hidden"
-                                    >
-                                        {/* Clickable card area */}
-                                        <div onClick={() => router.push(`/child/play/${skill.id}`)} className="cursor-pointer">
-                                            {/* Icon */}
-                                            <div className="text-6xl mb-4">{icon}</div>
+                                {/* Recognition Lists Sub-Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                                    {skillsToDisplay.filter(s => s.code.match(/^RF\.[1-4]\.1$/)).map((skill, index) => {
+                                        const listNumber = skill.code.match(/RF\.(\d)\.1/)?.[1] || '1';
+                                        return (
+                                            <motion.div
+                                                key={skill.id}
+                                                initial={{ scale: 0, rotate: -10 }}
+                                                animate={{ scale: 1, rotate: 0 }}
+                                                transition={{ delay: index * 0.1, type: 'spring' }}
+                                                whileHover={{ scale: 1.05, y: -5 }}
+                                                onClick={() => router.push(`/child/play/${skill.id}`)}
+                                                className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 shadow-lg cursor-pointer border-2 border-purple-200 hover:border-purple-400 transition-all"
+                                            >
+                                                <div className="text-center">
+                                                    <div className="text-4xl mb-2">📋</div>
+                                                    <h4 className="text-xl font-bold text-purple-800 mb-1">List {listNumber}</h4>
+                                                    <p className="text-sm text-gray-600 mb-3">20 Words</p>
 
-                                            {/* Skill Name */}
-                                            <h3 className="text-2xl font-bold text-purple-800 mb-2">
-                                                {stageName}
-                                            </h3>
-                                            <p className="text-gray-600 mb-4 text-sm">
-                                                All 80 Dolch Words
-                                            </p>
+                                                    {skill.totalAttempts > 0 && (
+                                                        <div className="mb-3">
+                                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                                <div
+                                                                    className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
+                                                                    style={{ width: `${skill.progress}%` }}
+                                                                />
+                                                            </div>
+                                                            <p className="text-xs text-gray-600 mt-1">{skill.progress}%</p>
+                                                        </div>
+                                                    )}
 
-                                            {/* Tier Badge */}
-                                            {skill.tier && (
-                                                <div className="mb-4">
-                                                    <div className={`inline-block px-4 py-2 rounded-full text-sm font-bold ${skill.tier === 1 ? 'bg-green-100 text-green-700' :
-                                                        skill.tier === 2 ? 'bg-yellow-100 text-yellow-700' :
-                                                            'bg-red-100 text-red-700'
+                                                    <div className={`text-sm font-bold px-4 py-2 rounded-full ${skill.isCompleted ? 'bg-green-500 text-white' :
+                                                        skill.totalAttempts > 0 ? 'bg-yellow-500 text-white' :
+                                                            'bg-blue-500 text-white'
                                                         }`}>
-                                                        Tier {skill.tier}
+                                                        {skill.isCompleted ? '✅ Done' : skill.totalAttempts > 0 ? '📝 Continue' : '🎮 Start'}
                                                     </div>
                                                 </div>
-                                            )}
+                                            </motion.div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
 
-                                            {/* Progress */}
-                                            {skill.totalAttempts > 0 && (
-                                                <div className="mb-4">
-                                                    <div className="flex justify-between text-sm mb-1">
-                                                        <span className="text-gray-600">Progress</span>
-                                                        <span className="font-bold text-purple-600">{skill.progress}%</span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-200 rounded-full h-2">
-                                                        <div
-                                                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
-                                                            style={{ width: `${skill.progress}%` }}
-                                                        />
+                            {/* Recall Lists Group */}
+                            <div className="bg-white rounded-3xl p-6 shadow-xl">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <div className="text-5xl">🎧</div>
+                                    <div>
+                                        <h3 className="text-3xl font-bold text-purple-800">Recall</h3>
+                                        <p className="text-gray-600">4 Lists × 20 Words Each</p>
+                                    </div>
+                                </div>
+
+                                {/* Recall Lists Sub-Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                                    {skillsToDisplay.filter(s => s.code.match(/^RF\.[1-4]\.3$/)).map((skill, index) => {
+                                        const listNumber = skill.code.match(/RF\.(\d)\.3/)?.[1] || '1';
+                                        return (
+                                            <motion.div
+                                                key={skill.id}
+                                                initial={{ scale: 0, rotate: -10 }}
+                                                animate={{ scale: 1, rotate: 0 }}
+                                                transition={{ delay: (index + 4) * 0.1, type: 'spring' }}
+                                                whileHover={{ scale: 1.05, y: -5 }}
+                                                onClick={() => router.push(`/child/play/${skill.id}`)}
+                                                className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-6 shadow-lg cursor-pointer border-2 border-blue-200 hover:border-blue-400 transition-all"
+                                            >
+                                                <div className="text-center">
+                                                    <div className="text-4xl mb-2">📖</div>
+                                                    <h4 className="text-xl font-bold text-blue-800 mb-1">List {listNumber}</h4>
+                                                    <p className="text-sm text-gray-600 mb-3">20 Words</p>
+
+                                                    {skill.totalAttempts > 0 && (
+                                                        <div className="mb-3">
+                                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                                <div
+                                                                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"
+                                                                    style={{ width: `${skill.progress}%` }}
+                                                                />
+                                                            </div>
+                                                            <p className="text-xs text-gray-600 mt-1">{skill.progress}%</p>
+                                                        </div>
+                                                    )}
+
+                                                    <div className={`text-sm font-bold px-4 py-2 rounded-full ${skill.isCompleted ? 'bg-green-500 text-white' :
+                                                        skill.totalAttempts > 0 ? 'bg-yellow-500 text-white' :
+                                                            'bg-blue-500 text-white'
+                                                        }`}>
+                                                        {skill.isCompleted ? '✅ Done' : skill.totalAttempts > 0 ? '📝 Continue' : '🎮 Start'}
                                                     </div>
                                                 </div>
-                                            )}
+                                            </motion.div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
 
-                                            {/* Action Button */}
-                                            <div className={`flex items-center justify-center gap-2 text-white px-6 py-3 rounded-full font-bold ${skill.isCompleted
-                                                ? 'bg-gradient-to-r from-green-400 to-emerald-500'
-                                                : skill.totalAttempts > 0
-                                                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500'
-                                                    : 'bg-gradient-to-r from-blue-400 to-indigo-500'
-                                                }`}>
-                                                {skill.isCompleted ? '✅ Mastered' : skill.totalAttempts > 0 ? '📝 Continue' : '🎮 Start'}
+                            {/* Other Stages Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {skillsToDisplay.filter(s => s.code.startsWith('RF.ALL.')).map((skill, index) => {
+                                    const stageName = skill.name.split(' - ')[0];
+                                    const stageIcons: Record<string, string> = {
+                                        'Meaning': '🖼️',
+                                        'Reading': '📖',
+                                        'Spelling': '✍️'
+                                    };
+                                    const icon = stageIcons[stageName] || '🎮';
+
+                                    return (
+                                        <motion.div
+                                            key={skill.id}
+                                            initial={{ scale: 0, rotate: -10 }}
+                                            animate={{ scale: 1, rotate: 0 }}
+                                            transition={{ delay: (index + 8) * 0.1, type: 'spring' }}
+                                            whileHover={{ scale: 1.05, y: -5 }}
+                                            className="bg-white rounded-3xl p-8 shadow-xl relative overflow-hidden"
+                                        >
+                                            <div onClick={() => router.push(`/child/play/${skill.id}`)} className="cursor-pointer">
+                                                <div className="text-6xl mb-4">{icon}</div>
+                                                <h3 className="text-2xl font-bold text-purple-800 mb-2">{stageName}</h3>
+                                                <p className="text-gray-600 mb-4 text-sm">All 80 Dolch Words</p>
+
+                                                {skill.tier && (
+                                                    <div className="mb-4">
+                                                        <div className={`inline-block px-4 py-2 rounded-full text-sm font-bold ${skill.tier === 1 ? 'bg-green-100 text-green-700' :
+                                                            skill.tier === 2 ? 'bg-yellow-100 text-yellow-700' :
+                                                                'bg-red-100 text-red-700'
+                                                            }`}>
+                                                            Tier {skill.tier}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {skill.totalAttempts > 0 && (
+                                                    <div className="mb-4">
+                                                        <div className="flex justify-between text-sm mb-1">
+                                                            <span className="text-gray-600">Progress</span>
+                                                            <span className="font-bold text-purple-600">{skill.progress}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                                            <div
+                                                                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
+                                                                style={{ width: `${skill.progress}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className={`flex items-center justify-center gap-2 text-white px-6 py-3 rounded-full font-bold ${skill.isCompleted ? 'bg-gradient-to-r from-green-400 to-emerald-500' :
+                                                    skill.totalAttempts > 0 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
+                                                        'bg-gradient-to-r from-blue-400 to-indigo-500'
+                                                    }`}>
+                                                    {skill.isCompleted ? '✅ Mastered' : skill.totalAttempts > 0 ? '📝 Continue' : '🎮 Start'}
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Tier Info Modal */}
+                            {showTierInfo && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                                    onClick={() => setShowTierInfo(false)}
+                                >
+                                    <motion.div
+                                        initial={{ scale: 0.9, y: 20 }}
+                                        animate={{ scale: 1, y: 0 }}
+                                        exit={{ scale: 0.9, y: 20 }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                                    >
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h2 className="text-3xl font-bold text-purple-800">📊 Tier Classification System</h2>
+                                            <button
+                                                onClick={() => setShowTierInfo(false)}
+                                                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                                            >
+                                                <X className="w-6 h-6 text-gray-600" />
+                                            </button>
+                                        </div>
+
+                                        {/* Mastery Calculation */}
+                                        <div className="mb-6">
+                                            <h3 className="text-xl font-bold text-purple-700 mb-3">Mastery Calculation</h3>
+                                            <div className="bg-purple-50 rounded-xl p-4 space-y-2">
+                                                <p className="font-semibold text-purple-800">For each word:</p>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
+                                                    <li>Accuracy percentage</li>
+                                                    <li>Number of attempts</li>
+                                                    <li>Response time</li>
+                                                </ul>
+                                                <p className="font-semibold text-purple-800 mt-3">For each list:</p>
+                                                <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
+                                                    <li>Average mastery score calculated</li>
+                                                </ul>
                                             </div>
                                         </div>
+
+                                        {/* Tier Classification Table */}
+                                        <div>
+                                            <h3 className="text-xl font-bold text-purple-700 mb-3">Tier Classification (Automatic)</h3>
+                                            <div className="overflow-hidden rounded-xl border-2 border-purple-200">
+                                                <table className="w-full">
+                                                    <thead className="bg-purple-600 text-white">
+                                                        <tr>
+                                                            <th className="px-4 py-3 text-left font-semibold">Mastery %</th>
+                                                            <th className="px-4 py-3 text-left font-semibold">Tier</th>
+                                                            <th className="px-4 py-3 text-left font-semibold">Interpretation</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr className="bg-green-50 border-b border-green-200">
+                                                            <td className="px-4 py-3 font-semibold text-green-800">≥ 80%</td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="inline-block px-3 py-1 bg-green-500 text-white rounded-full text-sm font-bold">
+                                                                    Tier 1
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-gray-700">Independent / Grade-ready</td>
+                                                        </tr>
+                                                        <tr className="bg-yellow-50 border-b border-yellow-200">
+                                                            <td className="px-4 py-3 font-semibold text-yellow-800">60% – 79%</td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="inline-block px-3 py-1 bg-yellow-500 text-white rounded-full text-sm font-bold">
+                                                                    Tier 2
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-gray-700">Needs guided reinforcement</td>
+                                                        </tr>
+                                                        <tr className="bg-red-50">
+                                                            <td className="px-4 py-3 font-semibold text-red-800">&lt; 40%</td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="inline-block px-3 py-1 bg-red-500 text-white rounded-full text-sm font-bold">
+                                                                    Tier 3
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-gray-700">High risk – intervention required</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        {/* Note */}
+                                        <div className="mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                                            <p className="text-sm text-blue-800">
+                                                <strong>Note:</strong> Tier is assigned after the Recognition Stage only. This becomes the baseline diagnostic signal for reading readiness.
+                                            </p>
+                                        </div>
                                     </motion.div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Tier Info Modal */}
-                        {showTierInfo && (
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                                onClick={() => setShowTierInfo(false)}
-                            >
-                                <motion.div
-                                    initial={{ scale: 0.9, y: 20 }}
-                                    animate={{ scale: 1, y: 0 }}
-                                    exit={{ scale: 0.9, y: 20 }}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
-                                >
-                                    {/* Header */}
-                                    <div className="flex items-center justify-between mb-6">
-                                        <h2 className="text-3xl font-bold text-purple-800">📊 Tier Classification System</h2>
-                                        <button
-                                            onClick={() => setShowTierInfo(false)}
-                                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                                        >
-                                            <X className="w-6 h-6 text-gray-600" />
-                                        </button>
-                                    </div>
-
-                                    {/* Mastery Calculation */}
-                                    <div className="mb-6">
-                                        <h3 className="text-xl font-bold text-purple-700 mb-3">Mastery Calculation</h3>
-                                        <div className="bg-purple-50 rounded-xl p-4 space-y-2">
-                                            <p className="font-semibold text-purple-800">For each word:</p>
-                                            <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
-                                                <li>Accuracy percentage</li>
-                                                <li>Number of attempts</li>
-                                                <li>Response time</li>
-                                            </ul>
-                                            <p className="font-semibold text-purple-800 mt-3">For each list:</p>
-                                            <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4">
-                                                <li>Average mastery score calculated</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-
-                                    {/* Tier Classification Table */}
-                                    <div>
-                                        <h3 className="text-xl font-bold text-purple-700 mb-3">Tier Classification (Automatic)</h3>
-                                        <div className="overflow-hidden rounded-xl border-2 border-purple-200">
-                                            <table className="w-full">
-                                                <thead className="bg-purple-600 text-white">
-                                                    <tr>
-                                                        <th className="px-4 py-3 text-left font-semibold">Mastery %</th>
-                                                        <th className="px-4 py-3 text-left font-semibold">Tier</th>
-                                                        <th className="px-4 py-3 text-left font-semibold">Interpretation</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <tr className="bg-green-50 border-b border-green-200">
-                                                        <td className="px-4 py-3 font-semibold text-green-800">≥ 80%</td>
-                                                        <td className="px-4 py-3">
-                                                            <span className="inline-block px-3 py-1 bg-green-500 text-white rounded-full text-sm font-bold">
-                                                                Tier 1
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-gray-700">Independent / Grade-ready</td>
-                                                    </tr>
-                                                    <tr className="bg-yellow-50 border-b border-yellow-200">
-                                                        <td className="px-4 py-3 font-semibold text-yellow-800">60% – 79%</td>
-                                                        <td className="px-4 py-3">
-                                                            <span className="inline-block px-3 py-1 bg-yellow-500 text-white rounded-full text-sm font-bold">
-                                                                Tier 2
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-gray-700">Needs guided reinforcement</td>
-                                                    </tr>
-                                                    <tr className="bg-red-50">
-                                                        <td className="px-4 py-3 font-semibold text-red-800">&lt; 40%</td>
-                                                        <td className="px-4 py-3">
-                                                            <span className="inline-block px-3 py-1 bg-red-500 text-white rounded-full text-sm font-bold">
-                                                                Tier 3
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-gray-700">High risk – intervention required</td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    {/* Note */}
-                                    <div className="mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                                        <p className="text-sm text-blue-800">
-                                            <strong>Note:</strong> Tier is assigned after the Recognition Stage only. This becomes the baseline diagnostic signal for reading readiness.
-                                        </p>
-                                    </div>
                                 </motion.div>
-                            </motion.div>
-                        )}
+                            )}
+                        </div>
                     </div>
-                </div >
+                </div>
             </>
         );
     }

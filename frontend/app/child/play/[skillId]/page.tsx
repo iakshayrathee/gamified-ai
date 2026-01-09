@@ -163,8 +163,11 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
             console.log('Found skill:', currentSkill.name);
             setSkill(currentSkill);
 
+            // Check if this is a Recognition skill (RF.1.1, RF.2.1, RF.3.1, RF.4.1)
+            const isRecognitionSkill = currentSkill.code.match(/^RF\.[1-4]\.1$/);
+
             // ADAPTIVE QUIZ FLOW: Start with first 5 questions at difficulty level 1
-            console.log('Fetching initial 5 questions at difficulty level 1');
+            console.log('Fetching initial questions at difficulty level 1');
             const level1Questions = await ApiClient.getSkillQuestions(skillId, 1);
             console.log('Received level 1 questions:', level1Questions.length);
 
@@ -174,8 +177,13 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 return;
             }
 
-            // Take only first 5 questions for initial batch
-            const initialBatch = level1Questions.slice(0, 5);
+            // For Recognition skills, load ALL questions (20 words per list)
+            // For other skills, take only first 5 questions for initial batch
+            const initialBatch = isRecognitionSkill
+                ? level1Questions  // All 20 questions
+                : level1Questions.slice(0, 5);  // First 5 questions
+
+            console.log(`Loading ${initialBatch.length} questions for ${isRecognitionSkill ? 'Recognition' : 'adaptive'} quiz`);
             setQuestions(initialBatch);
             setDifficulty(1); // Ensure we start at level 1
             console.log('Initial batch loaded: 5 questions at difficulty 1');
@@ -202,6 +210,12 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
     // Load next batch of 5 questions at specified difficulty
     async function loadNextBatch(recommendedDifficulty: 1 | 2 | 3) {
         if (isLoadingRef.current) return;
+
+        // Skip batch loading for Recognition skills - all questions already loaded
+        if (skill?.code.match(/^RF\.[1-4]\.1$/)) {
+            console.log('Recognition skill: All questions already loaded, skipping batch load');
+            return;
+        }
 
         try {
             isLoadingRef.current = true;
@@ -551,13 +565,31 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
 
     const currentQuestion = questions[currentQuestionIndex];
 
-    // Special rendering for Recognition and Meaning skills - Time-based, no quiz mechanics
-    if (skill?.code === 'RF.ALL.1') {
+    // Special rendering for Recognition skills (List-based: RF.1.1, RF.2.1, RF.3.1, RF.4.1)
+    if (skill?.code.match(/^RF\.[1-4]\.1$/)) {
         return (
             <div className="h-screen w-screen overflow-hidden">
                 {/* Full screen flashcard game - no rules modal */}
                 {currentQuestion && (
                     <FlashcardRecognitionGame
+                        question={currentQuestion}
+                        onAnswer={handleAnswer}
+                        difficultyLevel={difficulty}
+                        showHint={false}
+                        isRulesModalOpen={false}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    // Special rendering for Recall skills (List-based: RF.1.3, RF.2.3, RF.3.3, RF.4.3)
+    if (skill?.code.match(/^RF\.[1-4]\.3$/)) {
+        return (
+            <div className="h-screen w-screen overflow-hidden">
+                {/* Full screen flashcard viewer - no quiz wrapper */}
+                {currentQuestion && (
+                    <RecallGame
                         question={currentQuestion}
                         onAnswer={handleAnswer}
                         difficultyLevel={difficulty}
@@ -587,7 +619,7 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
         );
     }
 
-    // Recall quiz - continuous flow with auditory-to-visual mapping
+    // Recall quiz - continuous flow with auditory-to-visual mapping (OLD UNIFIED SKILL - DEPRECATED)
     if (skill?.code === 'RF.ALL.3') {
         return (
             <div className="h-screen w-screen overflow-hidden">
@@ -599,7 +631,6 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                         difficultyLevel={difficulty}
                         showHint={false}
                         isRulesModalOpen={false}
-                        gameMode="tap"
                     />
                 )}
             </div>
@@ -877,8 +908,8 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
 
                                 switch (template) {
                                     case 'TAP_SELECT':
-                                        // Check if this is the unified Recognition skill
-                                        if (skill?.code === 'RF.ALL.1') {
+                                        // Check if this is a list-based Recognition skill (RF.1.1, RF.2.1, RF.3.1, RF.4.1)
+                                        if (skill?.code.match(/^RF\.[1-4]\.1$/)) {
                                             return <FlashcardRecognitionGame
                                                 question={currentQuestion}
                                                 onAnswer={handleAnswer}
@@ -899,7 +930,6 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                                                 difficultyLevel={difficulty}
                                                 showHint={false}
                                                 isRulesModalOpen={showRulesModal}
-                                                gameMode="tap"
                                             />;
                                         }
                                         return <AudioToLetterGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;

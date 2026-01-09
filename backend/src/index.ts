@@ -253,10 +253,21 @@ app.get('/api/skills/:skillId/questions', async (req: Request, res: Response) =>
         const { skillId } = req.params;
         const difficulty = req.query.difficulty ? parseInt(req.query.difficulty as string) : undefined;
 
+        // Get skill info to check if it's a Recognition skill
+        const skill = await prisma.microSkill.findUnique({
+            where: { id: skillId },
+            select: { code: true }
+        });
+
+        // For Recognition skills (RF.1.1, RF.2.1, RF.3.1, RF.4.1), ignore difficulty
+        // All words in a list have the same difficulty level
+        const isRecognitionSkill = skill?.code.match(/^RF\.[1-4]\.1$/);
+
         const questions = await prisma.question.findMany({
             where: {
                 microSkillId: skillId,
-                ...(difficulty && { difficultyLevel: difficulty })
+                // Only filter by difficulty if NOT a Recognition skill
+                ...(!isRecognitionSkill && difficulty && { difficultyLevel: difficulty })
             },
             include: {
                 microSkill: {
@@ -600,10 +611,10 @@ app.post('/api/attempts', async (req: Request, res: Response) => {
             }
         });
 
-        // Calculate tier for Reading Foundation Recognition stage (RF.ALL.1) ONLY
+        // Calculate tier for Reading Foundation Recognition stages (RF.1.1, RF.2.1, RF.3.1, RF.4.1)
         // This is the baseline diagnostic signal
         let tierInfo = null;
-        if (updatedProgress.microSkill.code === 'RF.ALL.1') {
+        if (updatedProgress.microSkill.code.match(/^RF\.[1-4]\.1$/)) {
             // Get the question to extract the word
             const question = await prisma.question.findUnique({
                 where: { id: questionId }
