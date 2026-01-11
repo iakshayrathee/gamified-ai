@@ -429,6 +429,151 @@ app.get('/api/child/:childId/word-mastery/:skillId', async (req: Request, res: R
     }
 });
 
+// Get comprehensive stage report for a child
+app.get('/api/child/:childId/stage-report/:skillId', async (req: Request, res: Response) => {
+    try {
+        const { childId, skillId } = req.params;
+
+        // Get skill info
+        const skill = await prisma.microSkill.findUnique({
+            where: { id: skillId },
+            select: { code: true, name: true }
+        });
+
+        if (!skill) {
+            return res.status(404).json({ error: 'Skill not found' });
+        }
+
+        // Get all attempts for this skill
+        const attempts = await prisma.attempt.findMany({
+            where: { childId, microSkillId: skillId },
+            orderBy: { createdAt: 'desc' },
+            take: 100
+        });
+
+        // Get skill progress
+        const skillProgress = await prisma.skillProgress.findUnique({
+            where: {
+                childId_microSkillId: {
+                    childId,
+                    microSkillId: skillId
+                }
+            }
+        });
+
+        // Import services
+        const { default: SightWordService } = await import('./lib/sight-word-service');
+
+        // Calculate error patterns
+        const errorPatterns = SightWordService.analyzeErrorPatterns(attempts as any);
+
+        // Get word mastery data (for Recognition stages)
+        let wordMastery: any[] = [];
+        let strengthWords: string[] = [];
+        let strugglingWords: string[] = [];
+        let needsPracticeWords: string[] = [];
+
+        if (skill.code.match(/^RF\.[1-4]\.[13]$/)) {
+            // Recognition or Recall stages have word-level tracking
+            wordMastery = await prisma.wordMastery.findMany({
+                where: { childId, microSkillId: skillId },
+                orderBy: { accuracyPercentage: 'desc' }
+            });
+
+            strengthWords = wordMastery
+                .filter(wm => wm.tier === 1)
+                .map(wm => wm.word);
+
+            strugglingWords = wordMastery
+                .filter(wm => wm.tier === 3)
+                .map(wm => wm.word);
+
+            needsPracticeWords = wordMastery
+                .filter(wm => wm.tier === 2)
+                .map(wm => wm.word);
+        }
+
+        // Calculate overall metrics
+        const totalAttempts = attempts.length;
+        const correctAttempts = attempts.filter(a => a.isCorrect).length;
+        const overallAccuracy = totalAttempts > 0 ? (correctAttempts / totalAttempts) * 100 : 0;
+
+        // Calculate tier
+        const tier = SightWordService.calculateTier(overallAccuracy);
+        const riskIndicator = SightWordService.calculateRiskIndicator(errorPatterns, tier.tier);
+
+        // Generate recommendations
+        const recommendations: string[] = [];
+        if (tier.tier === 3) {
+            recommendations.push('Daily practice with visual aids recommended');
+            recommendations.push('Consider one-on-one tutoring sessions');
+            recommendations.push('Use multi-sensory learning approaches');
+        } else if (tier.tier === 2) {
+            recommendations.push('Regular practice 3-4 times per week');
+            recommendations.push('Focus on struggling words');
+            recommendations.push('Use memory games and flashcards');
+        } else {
+            recommendations.push('Maintain current practice routine');
+            recommendations.push('Ready to progress to next stage');
+            recommendations.push('Consider enrichment activities');
+        }
+
+        // Recommended games based on error patterns
+        const recommendedGames: string[] = [];
+        if (errorPatterns.visualConfusion) {
+            recommendedGames.push('Visual Discrimination Games');
+            recommendedGames.push('Letter Matching Activities');
+        }
+        if (errorPatterns.slowProcessing) {
+            recommendedGames.push('Timed Flashcard Practice');
+            recommendedGames.push('Speed Reading Exercises');
+        }
+        if (errorPatterns.randomGuessing) {
+            recommendedGames.push('Meaning-Based Matching');
+            recommendedGames.push('Context Clue Games');
+        }
+
+        // Calculate readiness score (0-100)
+        let readinessScore = overallAccuracy;
+        if (errorPatterns.visualConfusion) readinessScore -= 10;
+        if (errorPatterns.slowProcessing) readinessScore -= 5;
+        if (errorPatterns.inconsistentPerformance) readinessScore -= 10;
+        readinessScore = Math.max(0, Math.min(100, readinessScore));
+
+        res.json({
+            skillInfo: {
+                code: skill.code,
+                name: skill.name
+            },
+            overallMetrics: {
+                totalAttempts,
+                correctAttempts,
+                accuracy: Math.round(overallAccuracy),
+                avgResponseTime: skillProgress?.avgResponseTime || 0,
+                tier: tier.tier,
+                tierLabel: tier.label,
+                tierEmoji: tier.emoji,
+                riskIndicator
+            },
+            wordBreakdown: {
+                strengthWords,
+                strugglingWords,
+                needsPracticeWords,
+                totalWords: wordMastery.length
+            },
+            errorPatterns,
+            recommendations,
+            recommendedGames,
+            readinessScore: Math.round(readinessScore),
+            lastAttemptedAt: skillProgress?.lastAttemptedAt || null
+        });
+    } catch (error) {
+        console.error('Error fetching stage report:', error);
+        res.status(500).json({ error: 'Failed to fetch stage report' });
+    }
+});
+
+
 // Log attempt
 app.post('/api/attempts', async (req: Request, res: Response) => {
     try {

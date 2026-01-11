@@ -27,6 +27,7 @@ import QuizResults from '@/components/quiz/QuizResults';
 import QuizTimer from '@/components/quiz/QuizTimer';
 import QuizRulesModal from '@/components/quiz/QuizRulesModal';
 import AnswerFeedback from '@/components/quiz/AnswerFeedback';
+import StageResultsScreen from '@/components/quiz/StageResultsScreen';
 
 export default function SkillPlayPage({ params }: { params: Promise<{ skillId: string }> }) {
     const router = useRouter();
@@ -54,6 +55,10 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [difficultyChangeMessage, setDifficultyChangeMessage] = useState<string | null>(null);
     const [aiInsights, setAiInsights] = useState<string[]>([]);
+
+    // Stage results state
+    const [showStageResults, setShowStageResults] = useState(false);
+    const [stageReportData, setStageReportData] = useState<any>(null);
 
     // Timer and quiz rules state
     const [showRulesModal, setShowRulesModal] = useState(true);
@@ -163,8 +168,12 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
             console.log('Found skill:', currentSkill.name);
             setSkill(currentSkill);
 
-            // Check if this is a Recognition skill (RF.1.1, RF.2.1, RF.3.1, RF.4.1)
+            // Check if this is a skill that loads ALL questions upfront
+            // Recognition skills: RF.1.1, RF.2.1, RF.3.1, RF.4.1 (20 words each)
+            // Unified stages: RF.ALL.2 (Meaning), RF.ALL.4 (Reading), RF.ALL.5 (Spelling) - 80 words each
             const isRecognitionSkill = currentSkill.code.match(/^RF\.[1-4]\.1$/);
+            const isUnifiedStage = currentSkill.code.match(/^RF\.ALL\.[245]$/);
+            const loadsAllQuestions = isRecognitionSkill || isUnifiedStage;
 
             // ADAPTIVE QUIZ FLOW: Start with first 5 questions at difficulty level 1
             console.log('Fetching initial questions at difficulty level 1');
@@ -177,16 +186,16 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 return;
             }
 
-            // For Recognition skills, load ALL questions (20 words per list)
+            // For RF stages that load all questions upfront, load everything
             // For other skills, take only first 5 questions for initial batch
-            const initialBatch = isRecognitionSkill
-                ? level1Questions  // All 20 questions
+            const initialBatch = loadsAllQuestions
+                ? level1Questions  // All questions (20 or 80)
                 : level1Questions.slice(0, 5);  // First 5 questions
 
-            console.log(`Loading ${initialBatch.length} questions for ${isRecognitionSkill ? 'Recognition' : 'adaptive'} quiz`);
+            console.log(`Loading ${initialBatch.length} questions for ${loadsAllQuestions ? 'full-load' : 'adaptive'} quiz`);
             setQuestions(initialBatch);
             setDifficulty(1); // Ensure we start at level 1
-            console.log('Initial batch loaded: 5 questions at difficulty 1');
+            console.log(`Initial batch loaded: ${initialBatch.length} questions at difficulty 1`);
 
             // Start session
             // console.log('🎮 Starting quiz session:', {
@@ -211,9 +220,11 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
     async function loadNextBatch(recommendedDifficulty: 1 | 2 | 3) {
         if (isLoadingRef.current) return;
 
-        // Skip batch loading for Recognition skills - all questions already loaded
-        if (skill?.code.match(/^RF\.[1-4]\.1$/)) {
-            console.log('Recognition skill: All questions already loaded, skipping batch load');
+        // Skip batch loading for RF stages that load all questions upfront
+        // Recognition: RF.1.1, RF.2.1, RF.3.1, RF.4.1
+        // Unified: RF.ALL.2 (Meaning), RF.ALL.4 (Reading), RF.ALL.5 (Spelling)
+        if (skill?.code.match(/^RF\.[1-4]\.1$/) || skill?.code.match(/^RF\.ALL\.[245]$/)) {
+            console.log('RF stage with all questions pre-loaded, skipping batch load');
             return;
         }
 
@@ -337,7 +348,10 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 const nextIndex = currentQuestionIndex + 1;
                 const shouldLoadNext = nextIndex % 5 === 0 && nextIndex >= 5;
 
-                if (shouldLoadNext) {
+                // Check if this is an RF stage that loads all questions upfront
+                const loadsAllQuestions = skill?.code.match(/^RF\.[1-4]\.1$/) || skill?.code.match(/^RF\.ALL\.[245]$/);
+
+                if (shouldLoadNext && !loadsAllQuestions) {
                     console.log(`Completed ${nextIndex} questions. Loading next batch...`);
                     const recommendedDifficulty = result.nextQuestionDifficulty;
 
@@ -356,13 +370,9 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                     // Move to next question or show results
                     if (currentQuestionIndex < questions.length - 1) {
                         setCurrentQuestionIndex(prev => prev + 1);
-                    } else if (currentQuestionIndex >= 9) {
-                        // Minimum 10 questions completed - end quiz
-                        console.log('Minimum 10 questions completed. Ending quiz.');
-                        handleSessionComplete();
                     } else {
-                        // Less than 10 questions - should not happen with adaptive loading
-                        console.warn(`Quiz ending with only ${currentQuestionIndex + 1} questions`);
+                        // All questions completed - end quiz
+                        console.log(`Quiz completed: ${currentQuestionIndex + 1}/${questions.length} questions answered`);
                         handleSessionComplete();
                     }
                 }
@@ -392,15 +402,53 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
     }
 
     async function handleSessionComplete() {
-        if (!childId || !skill) return;
+        console.log('🏁 handleSessionComplete called', { childId, skillCode: skill?.code, skillName: skill?.name });
+
+        if (!childId || !skill) {
+            console.error('❌ Missing childId or skill', { childId, skill });
+            return;
+        }
 
         try {
-            // Calculate mastery
-            const masteryResult = await ApiClient.calculateMastery(childId, skill.id);
-            setMasteryAchieved(masteryResult.mastered);
-            setShowResults(true);
+            // Check if this is a Reading Foundation stage that should show comprehensive results
+            const isListBasedStage = skill.code.match(/^RF\.[1-4]\.[13]$/); // Recognition or Recall lists
+            const isUnifiedStage = skill.code.match(/^RF\.ALL\.[245]$/); // Meaning, Reading, Spelling
+            const shouldShowStageResults = isListBasedStage || isUnifiedStage;
+
+            console.log('📊 Stage type check:', {
+                isListBasedStage: !!isListBasedStage,
+                isUnifiedStage: !!isUnifiedStage,
+                shouldShowStageResults
+            });
+
+            if (shouldShowStageResults) {
+                console.log('🎯 Fetching comprehensive stage report...');
+                // Fetch comprehensive stage report
+                const response = await fetch(`http://localhost:5000/api/child/${childId}/stage-report/${skill.id}`);
+
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+
+                const reportData = await response.json();
+                console.log('✅ Stage report received:', reportData);
+
+                setStageReportData(reportData);
+                setShowStageResults(true);
+                console.log('✅ showStageResults set to true');
+            } else {
+                console.log('📈 Calculating mastery for non-RF stage...');
+                // Calculate mastery for other skills
+                const masteryResult = await ApiClient.calculateMastery(childId, skill.id);
+                console.log('✅ Mastery calculated:', masteryResult);
+
+                setMasteryAchieved(masteryResult.mastered);
+                setShowResults(true);
+                console.log('✅ showResults set to true');
+            }
         } catch (err) {
-            console.error('Error calculating mastery:', err);
+            console.error('❌ Error in handleSessionComplete:', err);
+            // Fallback to showing basic results
             setShowResults(true);
         }
     }
@@ -526,7 +574,43 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
         );
     }
 
-    // Results screen
+    // Stage Results screen (for Recognition/Recall stages)
+    if (showStageResults && stageReportData) {
+        return (
+            <StageResultsScreen
+                totalAttempts={stageReportData.overallMetrics.totalAttempts}
+                correctAttempts={stageReportData.overallMetrics.correctAttempts}
+                accuracy={stageReportData.overallMetrics.accuracy}
+                avgResponseTime={stageReportData.overallMetrics.avgResponseTime}
+                starsEarned={totalStars}
+                coinsEarned={totalCoins}
+                tier={stageReportData.overallMetrics.tier}
+                tierLabel={stageReportData.overallMetrics.tierLabel}
+                tierEmoji={stageReportData.overallMetrics.tierEmoji}
+                riskIndicator={stageReportData.overallMetrics.riskIndicator}
+                strengthWords={stageReportData.wordBreakdown.strengthWords}
+                strugglingWords={stageReportData.wordBreakdown.strugglingWords}
+                needsPracticeWords={stageReportData.wordBreakdown.needsPracticeWords}
+                errorPatterns={stageReportData.errorPatterns}
+                recommendations={stageReportData.recommendations}
+                recommendedGames={stageReportData.recommendedGames}
+                readinessScore={stageReportData.readinessScore}
+                skillName={skill?.name || ''}
+                domainId={skill?.domainId || ''}
+                onPlayAgain={() => {
+                    setShowStageResults(false);
+                    setStageReportData(null);
+                    router.push(`/child/play/${skillId}`);
+                }}
+                onViewFullReport={() => {
+                    // Navigate to domain page and open report modal
+                    router.push(`/child/domain/${skill?.domainId}`);
+                }}
+            />
+        );
+    }
+
+    // Results screen (for other skills)
     if (showResults) {
         const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0;
 

@@ -71,10 +71,17 @@ export default function QuizResults({
             // Validate required props
             if (!sessionId || !childId) {
                 console.warn('Missing sessionId or childId:', { sessionId, childId });
-                throw new Error('Session ID and Child ID are required for AI review');
+                // Set fallback review instead of throwing
+                setReview({
+                    overallPerformance: `Great effort! You completed the quiz with ${accuracy}% accuracy! 🎯`,
+                    strengths: ['You showed determination 💪', 'You completed all questions ⭐'],
+                    areasToImprove: ['Keep practicing! 📚'],
+                    specificFeedback: 'Every attempt helps you learn and grow! Keep up the great work! 🚀',
+                    encouragement: 'You\'re doing amazing! Keep learning! 🌟',
+                    confusionPatterns: []
+                });
+                return;
             }
-
-            throw new Error('Session ID and Child ID are required for AI review');
 
             // OPTIMIZED: Single API call instead of two!
             const result = await ApiClient.getQuizReviewWithRecommendation(sessionId, childId);
