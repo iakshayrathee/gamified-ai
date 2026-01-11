@@ -93,7 +93,7 @@ export default function AudioToLetterGame({
                 <p className="mt-4 text-xl text-indigo-600">Tap the speaker to hear the sound again</p>
             </motion.div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6 max-w-4xl w-full relative z-10">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-8 max-w-5xl w-full relative z-10">
                 {shuffledOptions.map((option, index) => {
                     const isSelected = selectedAnswer === option;
                     const showAsCorrect = isSelected && isCorrect && showFeedback;
@@ -115,15 +115,15 @@ export default function AudioToLetterGame({
                                 onClick={() => handleSelect(option)}
                                 disabled={selectedAnswer !== null}
                                 className={`
-                                    min-h-[140px] w-full rounded-3xl p-6 text-6xl font-bold transition-all shadow-xl
-                                    flex items-center justify-center
+                                    min-h-[180px] w-full rounded-3xl p-8 text-7xl font-bold transition-all shadow-xl
+                                    flex items-center justify-center border-4
                                     ${selectedAnswer === null
-                                        ? 'bg-gradient-to-br from-white to-indigo-50 hover:from-indigo-50 hover:to-indigo-100 cursor-pointer'
+                                        ? 'bg-gradient-to-br from-white to-indigo-50 hover:from-indigo-50 hover:to-indigo-100 cursor-pointer border-indigo-200 hover:border-indigo-400'
                                         : showAsCorrect
-                                            ? 'bg-gradient-to-br from-green-400 to-green-600 text-white scale-105'
+                                            ? 'bg-gradient-to-br from-green-400 to-green-600 text-white scale-105 border-green-600'
                                             : showAsWrong
-                                                ? 'bg-gradient-to-br from-red-400 to-red-600 text-white'
-                                                : 'bg-gray-200 opacity-50'
+                                                ? 'bg-gradient-to-br from-red-400 to-red-600 text-white border-red-600'
+                                                : 'bg-gray-200 opacity-50 border-gray-300'
                                     }
                                 `}
                             >

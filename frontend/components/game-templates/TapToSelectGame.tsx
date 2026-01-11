@@ -276,9 +276,9 @@ export default function TapToSelectGame({
                 </AnimatePresence>
             </div>
 
-            {/* Options - Full Width Grid - Optimized sizing */}
+            {/* Options - Full Width Grid - Larger card sizing for better visibility */}
             {!showCorrectAnswer && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl w-full relative z-10 mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-6xl w-full relative z-10 mx-auto">
                     {shuffledOptions.map((option, index) => {
                         const isSelected = selectedAnswer === option;
                         const isCorrectOption = option === question.correctAnswer;
@@ -303,8 +303,9 @@ export default function TapToSelectGame({
                                     whileHover={!showFeedback ? { scale: 1.03, y: -3 } : {}}
                                     whileTap={!showFeedback ? { scale: 0.97 } : {}}
                                     className={`
-                                        relative p-6 rounded-2xl text-3xl font-bold
+                                        relative p-8 rounded-2xl text-4xl font-bold
                                         transition-all duration-300 shadow-xl
+                                        min-h-[180px] w-full
                                         ${shouldHighlight
                                             ? 'bg-gradient-to-br from-yellow-300 to-yellow-400 text-yellow-900 ring-8 ring-yellow-500 ring-opacity-50 animate-pulse'
                                             : showAsCorrect
@@ -358,8 +359,8 @@ export default function TapToSelectGame({
                                         )}
                                     </AnimatePresence>
 
-                                    {/* Option Text - Increased minimum size */}
-                                    <div className="flex items-center justify-center min-h-[100px] min-w-[200px]">
+                                    {/* Option Text - Larger, centered */}
+                                    <div className="flex items-center justify-center h-full">
                                         {option}
                                     </div>
                                 </motion.button>

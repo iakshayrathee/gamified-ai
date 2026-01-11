@@ -2045,6 +2045,239 @@ app.get('/api/quiz-review/:sessionId/:childId', async (req: Request, res: Respon
     }
 });
 
+// ============================================
+// COMPREHENSIVE QUIZ RESULTS ENDPOINT (NEW)
+// ============================================
+
+/**
+ * Get comprehensive quiz results with analytics, error patterns, and recommendations
+ * This is the unified endpoint for the new results system
+ */
+app.get('/api/child/:childId/quiz-results/:sessionId', async (req: Request, res: Response) => {
+    try {
+        const { childId, sessionId } = req.params;
+
+        console.log('Generating comprehensive quiz results for:', { childId, sessionId });
+
+        // Import analytics service
+        const { default: ResultsAnalyticsService } = await import('./lib/results-analytics-service');
+
+        // Get session data
+        const session = await prisma.session.findUnique({
+            where: { id: sessionId },
+            include: {
+                attempts: {
+                    include: {
+                        question: true,
+                        microSkill: true
+                    }
+                }
+            }
+        });
+
+        if (!session || session.attempts.length === 0) {
+            return res.status(404).json({ error: 'Session not found or has no attempts' });
+        }
+
+        const skillId = session.attempts[0]?.microSkillId;
+        if (!skillId) {
+            return res.status(404).json({ error: 'No skill found for session' });
+        }
+
+        // Calculate all analytics
+        const wordMasteryList = await ResultsAnalyticsService.calculateWordMastery(childId, skillId);
+        const listReadiness = await ResultsAnalyticsService.calculateListReadiness(childId, skillId);
+        const errorPatterns = await ResultsAnalyticsService.detectErrorPatterns(session.attempts);
+        const clusterAnalysis = await ResultsAnalyticsService.analyzeClusterPerformance(childId, skillId);
+        const gameRecommendations = ResultsAnalyticsService.generateGameRecommendations(errorPatterns);
+        const repetitionSchedule = ResultsAnalyticsService.calculateRepetitionSchedule(wordMasteryList);
+
+        // Get AI review and next skill recommendation
+        const aiResult = await quizReviewService.generateQuizReviewWithRecommendation(sessionId, childId);
+
+        // Get achievements for this child (calculate from all achievements)
+        const achievements = await prisma.achievement.findMany({
+            where: {
+                childId
+            }
+        });
+        const totalStars = Math.round(achievements.reduce((sum, a) => sum + a.starsEarned, 0));
+        const totalCoins = achievements.reduce((sum, a) => sum + a.coinsEarned, 0);
+
+        // Categorize words by mastery level
+        const mastered = wordMasteryList.filter(w => w.masteryPercentage >= 96);
+        const proficient = wordMasteryList.filter(w => w.masteryPercentage >= 80 && w.masteryPercentage < 96);
+        const developing = wordMasteryList.filter(w => w.masteryPercentage >= 50 && w.masteryPercentage < 80);
+        const struggling = wordMasteryList.filter(w => w.masteryPercentage < 50);
+
+        // Calculate metrics
+        const totalAttempts = session.attempts.length;
+        const correctAttempts = session.attempts.filter(a => a.isCorrect).length;
+        const accuracy = (correctAttempts / totalAttempts) * 100;
+        const avgResponseTime = session.attempts.reduce((sum, a) => sum + a.responseTimeSeconds, 0) / totalAttempts;
+
+        // Response time distribution
+        const fast = session.attempts.filter(a => a.responseTimeSeconds < 3).length;
+        const normal = session.attempts.filter(a => a.responseTimeSeconds >= 3 && a.responseTimeSeconds <= 6).length;
+        const slow = session.attempts.filter(a => a.responseTimeSeconds > 6).length;
+
+        // Consistency metrics
+        const batchSize = 5;
+        const batches: any[][] = [];
+        for (let i = 0; i < session.attempts.length; i += batchSize) {
+            batches.push(session.attempts.slice(i, i + batchSize));
+        }
+        const batchAccuracies = batches.map(batch => {
+            const correct = batch.filter(a => a.isCorrect).length;
+            return (correct / batch.length) * 100;
+        });
+        const mean = batchAccuracies.reduce((sum, val) => sum + val, 0) / batchAccuracies.length;
+        const squaredDiffs = batchAccuracies.map(val => Math.pow(val - mean, 2));
+        const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / batchAccuracies.length;
+        const standardDeviation = Math.sqrt(variance);
+
+        // Determine pattern
+        let pattern = 'Consistent performance';
+        if (batchAccuracies.length >= 2) {
+            const firstHalfAvg = batchAccuracies.slice(0, Math.floor(batchAccuracies.length / 2))
+                .reduce((sum, val) => sum + val, 0) / Math.floor(batchAccuracies.length / 2);
+            const secondHalfAvg = batchAccuracies.slice(Math.floor(batchAccuracies.length / 2))
+                .reduce((sum, val) => sum + val, 0) / (batchAccuracies.length - Math.floor(batchAccuracies.length / 2));
+
+            if (firstHalfAvg > secondHalfAvg + 20) {
+                pattern = 'Strong start, weak finish';
+            } else if (secondHalfAvg > firstHalfAvg + 20) {
+                pattern = 'Weak start, strong finish';
+            }
+        }
+
+        // Generate focus areas
+        const focusAreas: string[] = [];
+        if (errorPatterns.visualConfusion.detected) {
+            focusAreas.push('Practice distinguishing visually similar words');
+        }
+        if (errorPatterns.randomGuessing.detected) {
+            focusAreas.push('Slow down and think before answering');
+        }
+        if (errorPatterns.slowProcessing.detected) {
+            focusAreas.push('Build automaticity with flashcard drills');
+        }
+        if (clusterAnalysis.weakClusters.length > 0) {
+            focusAreas.push(`Focus on ${clusterAnalysis.weakClusters.map(c => c.clusterName).join(', ')}`);
+        }
+
+        // Generate interventions
+        const interventions: string[] = [];
+        if (listReadiness.riskIndicator === 'High') {
+            interventions.push('Schedule one-on-one tutoring sessions');
+            interventions.push('Use multisensory learning approaches');
+            interventions.push('Break practice into shorter, more frequent sessions');
+        } else if (listReadiness.riskIndicator === 'Medium') {
+            interventions.push('Provide guided practice with immediate feedback');
+            interventions.push('Use visual aids and manipulatives');
+        }
+
+        // Build comprehensive response
+        const response = {
+            summary: {
+                masteryAchieved: listReadiness.tier === 1,
+                accuracy: Math.round(accuracy),
+                totalStars,
+                totalCoins,
+                tier: listReadiness.tier,
+                tierLabel: listReadiness.tierLabel,
+                tierEmoji: listReadiness.tierEmoji,
+                riskIndicator: listReadiness.riskIndicator
+            },
+            metrics: {
+                totalAttempts,
+                correctAttempts,
+                avgResponseTime: Math.round(avgResponseTime * 10) / 10,
+                responseTimeDistribution: {
+                    fast,
+                    normal,
+                    slow
+                },
+                consistency: {
+                    variance: Math.round(variance),
+                    standardDeviation: Math.round(standardDeviation),
+                    pattern
+                },
+                questionBreakdown: session.attempts.map((a, index) => ({
+                    questionId: a.questionId,
+                    word: a.question?.correctAnswer || '',
+                    correct: a.isCorrect,
+                    timeSpent: Math.round(a.responseTimeSeconds * 10) / 10,
+                    attemptNumber: index + 1,
+                    errorType: a.errorType,
+                    userResponse: a.userResponse
+                }))
+            },
+            wordMastery: wordMasteryList.length > 0 ? {
+                mastered: mastered.map(w => ({
+                    word: w.word,
+                    masteryPercentage: Math.round(w.masteryPercentage),
+                    avgResponseTime: Math.round(w.avgResponseTime * 10) / 10,
+                    totalAttempts: w.totalAttempts
+                })),
+                proficient: proficient.map(w => ({
+                    word: w.word,
+                    masteryPercentage: Math.round(w.masteryPercentage),
+                    avgResponseTime: Math.round(w.avgResponseTime * 10) / 10,
+                    totalAttempts: w.totalAttempts
+                })),
+                developing: developing.map(w => ({
+                    word: w.word,
+                    masteryPercentage: Math.round(w.masteryPercentage),
+                    avgResponseTime: Math.round(w.avgResponseTime * 10) / 10,
+                    totalAttempts: w.totalAttempts
+                })),
+                struggling: struggling.map(w => ({
+                    word: w.word,
+                    masteryPercentage: Math.round(w.masteryPercentage),
+                    avgResponseTime: Math.round(w.avgResponseTime * 10) / 10,
+                    totalAttempts: w.totalAttempts,
+                    issues: w.issues
+                })),
+                weakClusters: clusterAnalysis.weakClusters.map(c => ({
+                    clusterName: c.clusterName,
+                    words: c.words,
+                    avgAccuracy: Math.round(c.avgAccuracy),
+                    recommendation: c.recommendation
+                })),
+                readinessScore: listReadiness.readinessScore,
+                readinessLevel: listReadiness.recommendedAction
+            } : undefined,
+            errorPatterns,
+            insights: {
+                strengths: aiResult.review.strengths,
+                areasToImprove: aiResult.review.areasToImprove,
+                specificFeedback: aiResult.review.specificFeedback,
+                encouragement: aiResult.review.encouragement,
+                learningTrend: 'stable' as const, // Would be calculated from historical data
+                learningVelocity: 0 // Would be calculated from historical data
+            },
+            recommendations: {
+                nextSkill: aiResult.recommendation,
+                recommendedGames: gameRecommendations,
+                focusAreas,
+                repetitionSchedule: repetitionSchedule.slice(0, 10).map(r => ({
+                    word: r.word,
+                    nextReviewDate: r.nextReviewDate.toISOString(),
+                    frequency: r.frequency,
+                    priority: r.priority
+                })),
+                interventions
+            }
+        };
+
+        res.json(response);
+    } catch (error) {
+        console.error('Error generating comprehensive quiz results:', error);
+        res.status(500).json({ error: 'Failed to generate quiz results' });
+    }
+});
+
 app.delete('/api/admin/questions/:id', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;

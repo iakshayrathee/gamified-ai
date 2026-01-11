@@ -181,9 +181,9 @@ export default function DragAndDropGame({
                     </div>
                 </div>
 
-                {/* Draggable Options - Optimized sizing */}
+                {/* Draggable Options - Larger sizing for better visibility */}
                 {!droppedItem && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl w-full mx-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6 max-w-5xl w-full mx-auto">
                         {shuffledOptions.map((option, index) => (
                             <motion.div
                                 key={option}
@@ -192,7 +192,7 @@ export default function DragAndDropGame({
                                 transition={{ delay: index * 0.1 }}
                             >
                                 <DraggableItem id={option}>
-                                    <div className="bg-gradient-to-br from-white to-blue-50 hover:from-blue-50 hover:to-blue-100 rounded-2xl p-5 text-4xl md:text-5xl font-bold text-center shadow-lg min-h-[120px] flex items-center justify-center transition-all border-4 border-blue-200 hover:border-blue-400">
+                                    <div className="bg-gradient-to-br from-white to-blue-50 hover:from-blue-50 hover:to-blue-100 rounded-2xl p-6 text-5xl md:text-6xl font-bold text-center shadow-lg min-h-[160px] flex items-center justify-center transition-all border-4 border-blue-200 hover:border-blue-400">
                                         {option}
                                     </div>
                                 </DraggableItem>

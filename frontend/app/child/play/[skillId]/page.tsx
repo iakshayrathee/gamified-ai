@@ -27,7 +27,7 @@ import QuizResults from '@/components/quiz/QuizResults';
 import QuizTimer from '@/components/quiz/QuizTimer';
 import QuizRulesModal from '@/components/quiz/QuizRulesModal';
 import AnswerFeedback from '@/components/quiz/AnswerFeedback';
-import StageResultsScreen from '@/components/quiz/StageResultsScreen';
+import { ResultsOrchestrator } from '@/components/quiz/results';
 
 export default function SkillPlayPage({ params }: { params: Promise<{ skillId: string }> }) {
     const router = useRouter();
@@ -55,10 +55,6 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [difficultyChangeMessage, setDifficultyChangeMessage] = useState<string | null>(null);
     const [aiInsights, setAiInsights] = useState<string[]>([]);
-
-    // Stage results state
-    const [showStageResults, setShowStageResults] = useState(false);
-    const [stageReportData, setStageReportData] = useState<any>(null);
 
     // Timer and quiz rules state
     const [showRulesModal, setShowRulesModal] = useState(true);
@@ -421,31 +417,10 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 shouldShowStageResults
             });
 
-            if (shouldShowStageResults) {
-                console.log('🎯 Fetching comprehensive stage report...');
-                // Fetch comprehensive stage report
-                const response = await fetch(`http://localhost:5000/api/child/${childId}/stage-report/${skill.id}`);
-
-                if (!response.ok) {
-                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
-                }
-
-                const reportData = await response.json();
-                console.log('✅ Stage report received:', reportData);
-
-                setStageReportData(reportData);
-                setShowStageResults(true);
-                console.log('✅ showStageResults set to true');
-            } else {
-                console.log('📈 Calculating mastery for non-RF stage...');
-                // Calculate mastery for other skills
-                const masteryResult = await ApiClient.calculateMastery(childId, skill.id);
-                console.log('✅ Mastery calculated:', masteryResult);
-
-                setMasteryAchieved(masteryResult.mastered);
-                setShowResults(true);
-                console.log('✅ showResults set to true');
-            }
+            // Show unified results for all skills
+            console.log('📊 Showing results screen...');
+            setShowResults(true);
+            console.log('✅ showResults set to true');
         } catch (err) {
             console.error('❌ Error in handleSessionComplete:', err);
             // Fallback to showing basic results
@@ -575,56 +550,16 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
     }
 
     // Stage Results screen (for Recognition/Recall stages)
-    if (showStageResults && stageReportData) {
-        return (
-            <StageResultsScreen
-                totalAttempts={stageReportData.overallMetrics.totalAttempts}
-                correctAttempts={stageReportData.overallMetrics.correctAttempts}
-                accuracy={stageReportData.overallMetrics.accuracy}
-                avgResponseTime={stageReportData.overallMetrics.avgResponseTime}
-                starsEarned={totalStars}
-                coinsEarned={totalCoins}
-                tier={stageReportData.overallMetrics.tier}
-                tierLabel={stageReportData.overallMetrics.tierLabel}
-                tierEmoji={stageReportData.overallMetrics.tierEmoji}
-                riskIndicator={stageReportData.overallMetrics.riskIndicator}
-                strengthWords={stageReportData.wordBreakdown.strengthWords}
-                strugglingWords={stageReportData.wordBreakdown.strugglingWords}
-                needsPracticeWords={stageReportData.wordBreakdown.needsPracticeWords}
-                errorPatterns={stageReportData.errorPatterns}
-                recommendations={stageReportData.recommendations}
-                recommendedGames={stageReportData.recommendedGames}
-                readinessScore={stageReportData.readinessScore}
-                skillName={skill?.name || ''}
-                domainId={skill?.domainId || ''}
-                onPlayAgain={() => {
-                    setShowStageResults(false);
-                    setStageReportData(null);
-                    router.push(`/child/play/${skillId}`);
-                }}
-                onViewFullReport={() => {
-                    // Navigate to domain page and open report modal
-                    router.push(`/child/domain/${skill?.domainId}`);
-                }}
-            />
-        );
-    }
-
-    // Results screen (for other skills)
+    // Results screen (unified for all skills)
     if (showResults) {
-        const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0;
-
         return (
-            <QuizResults
-                masteryAchieved={masteryAchieved}
-                skillName={skill?.name || ''}
-                totalStars={totalStars}
-                totalCoins={totalCoins}
-                accuracy={accuracy}
-                domainId={skill?.domainId || ''}
-                sessionId={session?.id || ''}
+            <ResultsOrchestrator
                 childId={childId || ''}
+                sessionId={session?.id || ''}
+                skillName={skill?.name || ''}
+                domainId={skill?.domainId || ''}
                 onPlayAgain={() => router.push(`/child/play/${skillId}`)}
+                onBackToDomains={() => router.push('/child/domains')}
             />
         );
     }
