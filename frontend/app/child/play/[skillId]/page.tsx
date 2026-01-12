@@ -596,6 +596,8 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                         difficultyLevel={difficulty}
                         showHint={false}
                         isRulesModalOpen={false}
+                        questionIndex={currentQuestionIndex}
+                        totalQuestions={questions.length}
                     />
                 )}
             </div>

@@ -22,6 +22,8 @@ export default function FlashcardRecognitionGame({
     difficultyLevel,
     showHint,
     isRulesModalOpen,
+    questionIndex,
+    totalQuestions,
 }: BaseGameProps) {
     const [wrongAttempts, setWrongAttempts] = useState(0);
     const [startTime] = useState(Date.now());
@@ -31,8 +33,9 @@ export default function FlashcardRecognitionGame({
     const [showFeedback, setShowFeedback] = useState<'correct' | 'incorrect' | null>(null);
     const [currentWord, setCurrentWord] = useState<string>('');
     const [allListWords, setAllListWords] = useState<string[]>([]);
-    const [recognizedWords, setRecognizedWords] = useState<Set<string>>(new Set());
-    const [wordPool, setWordPool] = useState<string[]>([]);
+    const [askedWords, setAskedWords] = useState<Set<string>>(new Set()); // Track words that have been asked
+    const [totalQuestionsInList, setTotalQuestionsInList] = useState<number>(0); // Total questions in the list
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0); // Current question index
     const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
 
     const { speak, stop } = useSpeech();
@@ -47,31 +50,64 @@ export default function FlashcardRecognitionGame({
         return shuffled;
     };
 
-    // Initialize word pool and display first 4 cards
+    // Generate dynamic options from remaining unasked words
+    const generateDynamicOptions = (
+        correctWord: string,
+        allWords: string[],
+        askedWordsSet: Set<string>,
+        questionIndex: number,
+        totalQuestions: number
+    ): string[] => {
+        // Get remaining unasked words (excluding current correct word)
+        const remainingWords = allWords.filter(w =>
+            w !== correctWord && !askedWordsSet.has(w)
+        );
+
+        // Calculate position from end
+        const questionsRemaining = totalQuestions - questionIndex;
+
+        // For last 3 questions, reduce option count
+        let maxDistractors;
+        if (questionsRemaining === 3) {
+            maxDistractors = 2; // 3 options total (1 correct + 2 distractors)
+        } else if (questionsRemaining === 2) {
+            maxDistractors = 1; // 2 options total (1 correct + 1 distractor)
+        } else if (questionsRemaining === 1) {
+            maxDistractors = 0; // 1 option total (only correct answer)
+        } else {
+            maxDistractors = Math.min(3, remainingWords.length);
+        }
+
+        // Randomly select distractors from remaining words
+        const shuffledRemaining = shuffleArray(remainingWords);
+        const selectedDistractors = shuffledRemaining.slice(0, maxDistractors);
+
+        // Combine correct answer with distractors and shuffle
+        const options = shuffleArray([correctWord, ...selectedDistractors]);
+
+        console.log('[FlashcardGame] Dynamic options generated:', {
+            correctWord,
+            questionIndex,
+            questionsRemaining,
+            maxDistractors,
+            remainingWordsCount: remainingWords.length,
+            optionsCount: options.length,
+            options
+        });
+
+        return options;
+    };
+
+    // Initialize word pool and display dynamically generated options
     useEffect(() => {
         console.log('[FlashcardGame] Question changed:', {
             questionId: question?.id,
             hasAssetUrls: !!question?.assetUrls,
             assetUrlsType: typeof question?.assetUrls,
             correctAnswer: question?.correctAnswer,
-            distractors: question?.distractors,
-            distractorsType: typeof question?.distractors
+            questionIndex,
+            totalQuestions
         });
-
-        // Parse distractors if they're a JSON string
-        let parsedDistractors: string[] = [];
-        if (question?.distractors) {
-            if (Array.isArray(question.distractors)) {
-                parsedDistractors = question.distractors;
-            } else if (typeof question.distractors === 'string') {
-                try {
-                    parsedDistractors = JSON.parse(question.distractors);
-                } catch (e) {
-                    console.error('[FlashcardGame] Failed to parse distractors:', e);
-                    parsedDistractors = [];
-                }
-            }
-        }
 
         if (question?.assetUrls && typeof question.assetUrls === 'object') {
             const assetData = question.assetUrls as any;
@@ -81,32 +117,39 @@ export default function FlashcardRecognitionGame({
                 listWordsLength: assetData.listWords?.length
             });
 
-            // For new 4-card flashcard mode
+            // For new 4-card flashcard mode with dynamic option generation
             if (assetData.displayMode === 'flashcard-4' && assetData.listWords) {
                 const listWords = assetData.listWords as string[];
                 console.log('[FlashcardGame] Initializing 4-card mode with', listWords.length, 'words');
+
+                // Store all list words and total count
                 setAllListWords(listWords);
+                setTotalQuestionsInList(listWords.length);
 
-                // CRITICAL: Use distractors + correctAnswer to ensure correct answer is in the 4 cards
-                if (parsedDistractors.length >= 3) {
-                    const options = [question.correctAnswer, ...parsedDistractors.slice(0, 3)];
-                    const shuffledOptions = shuffleArray(options);
-                    setAvailableOptions(shuffledOptions);
-                    setCurrentWord(question.correctAnswer);
-
-                    console.log('[FlashcardGame] Initialized with distractors:', {
-                        options: shuffledOptions,
-                        correctAnswer: question.correctAnswer,
-                        distractors: parsedDistractors
-                    });
-                } else {
-                    // Fallback: use first 4 words from list if distractors are missing
-                    console.warn('[FlashcardGame] Not enough distractors, using list words');
-                    const options = listWords.slice(0, 4);
-                    const shuffledOptions = shuffleArray(options);
-                    setAvailableOptions(shuffledOptions);
-                    setCurrentWord(question.correctAnswer);
+                // Update current question index if provided
+                if (questionIndex !== undefined) {
+                    setCurrentQuestionIndex(questionIndex);
                 }
+
+                // Generate dynamic options from remaining unasked words
+                const dynamicOptions = generateDynamicOptions(
+                    question.correctAnswer,
+                    listWords,
+                    askedWords,
+                    questionIndex || 0,
+                    totalQuestions || listWords.length
+                );
+
+                setAvailableOptions(dynamicOptions);
+                setCurrentWord(question.correctAnswer);
+
+                console.log('[FlashcardGame] Initialized with dynamic options:', {
+                    options: dynamicOptions,
+                    correctAnswer: question.correctAnswer,
+                    askedWordsCount: askedWords.size,
+                    questionIndex,
+                    totalQuestions
+                });
             } else {
                 // Fallback for old progressive mode (backward compatibility)
                 console.log('[FlashcardGame] Using fallback mode');
@@ -118,13 +161,6 @@ export default function FlashcardRecognitionGame({
                 setAvailableOptions(shuffledOptions);
                 setCurrentWord(question.correctAnswer);
             }
-        } else if (parsedDistractors.length > 0) {
-            // Handle case where options come from distractors only
-            console.log('[FlashcardGame] Using distractors-only mode');
-            const options = [question.correctAnswer, ...parsedDistractors.slice(0, 3)];
-            const shuffledOptions = shuffleArray(options);
-            setAvailableOptions(shuffledOptions);
-            setCurrentWord(question.correctAnswer);
         } else {
             // CRITICAL: Prevent blank screen - set minimal fallback
             console.error('[FlashcardGame] No valid question data found! Using emergency fallback', question);
@@ -135,7 +171,13 @@ export default function FlashcardRecognitionGame({
         stop();
         setWrongAttempts(0);
         setQuestionStartTime(Date.now());
-    }, [question?.id, stop, question?.correctAnswer, question?.distractors]);
+
+        // NOTE: We intentionally exclude 'askedWords', 'stop', and 'question.correctAnswer' from dependencies
+        // to prevent unnecessary re-renders. The effect should only run when the question changes (question.id),
+        // not when askedWords updates. This prevents the delay when moving between questions.
+        // The current askedWords value is properly captured in the closure when the effect runs.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [question?.id, questionIndex, totalQuestions]);
 
     // Auto-play question audio
     useEffect(() => {
@@ -170,10 +212,10 @@ export default function FlashcardRecognitionGame({
                 }]);
             }
 
-            // Mark word as recognized
-            const newRecognizedWords = new Set(recognizedWords);
-            newRecognizedWords.add(word);
-            setRecognizedWords(newRecognizedWords);
+            // Mark word as asked (correct answer)
+            const newAskedWords = new Set(askedWords);
+            newAskedWords.add(word);
+            setAskedWords(newAskedWords);
 
             // Move to next question after brief delay
             setTimeout(() => {
