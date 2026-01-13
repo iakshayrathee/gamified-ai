@@ -7,6 +7,7 @@ import { ArrowLeft, Star, Trophy, Sparkles, Clock, Target, TrendingUp } from 'lu
 import Link from 'next/link';
 import { ApiClient, Question, MicroSkill, Session } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
+import { attemptQueue } from '@/lib/attempt-queue';
 
 // Game components
 import TapSelectGame from '@/components/game-templates/TapToSelectGame';
@@ -269,19 +270,30 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
         // Skip feedback modal for Recognition and Meaning skills (RF.ALL.1, RF.ALL.2) - continuous flow
         const isContinuousFlowSkill = skill.code === 'RF.ALL.1' || skill.code === 'RF.ALL.2';
 
+        // OPTIMISTIC UI UPDATE - Immediate feedback without waiting for API
+        const estimatedStars = isCorrect ? 1.5 : 0;
         if (!isContinuousFlowSkill) {
-            // Show answer feedback IMMEDIATELY for snappy feel (only for non-Recognition skills)
+            setTotalStars(prev => prev + estimatedStars);
+            setTotalCoins(prev => prev + Math.round(estimatedStars));
+        }
+        setTotalAttempts(prev => prev + 1);
+        if (isCorrect) {
+            setCorrectCount(prev => prev + 1);
+        }
+
+        if (!isContinuousFlowSkill) {
+            // Show answer feedback IMMEDIATELY
             setFeedbackData({
                 isCorrect,
-                starsEarned: isCorrect ? 1.5 : 0, // Optimistic guess, updated later
+                starsEarned: estimatedStars,
                 timeTaken
             });
             setShowAnswerFeedback(true);
         }
 
         try {
-            // Log attempt to backend
-            const result = await ApiClient.logAttempt({
+            // QUEUE ATTEMPT (non-blocking) - No await!
+            const attemptId = attemptQueue.add({
                 childId,
                 questionId: question.id,
                 microSkillId: skill.id,
@@ -295,19 +307,10 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 difficultyLevelAtAttempt: difficulty,
             });
 
-            // Update stats with real data from backend (skip for continuous flow skills)
-            if (!isContinuousFlowSkill) {
-                setTotalStars(prev => prev + result.stars);
-                setTotalCoins(prev => prev + result.coins);
-            }
-            setTotalAttempts(prev => prev + 1);
-            if (isCorrect) {
-                setCorrectCount(prev => prev + 1);
-                // Update feedback with actual stars earned if different
-                if (!isContinuousFlowSkill) {
-                    setFeedbackData(prev => ({ ...prev, starsEarned: result.stars }));
-                }
-            }
+            console.log(`✅ Queued attempt ${attemptId} (queue: ${attemptQueue.getStatus().queueLength})`);
+
+            // Note: No longer waiting for backend response!
+            // Stars/coins already updated optimistically above
 
             // Update average response time
             setQuestionTimings(prev => {
@@ -317,28 +320,12 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                 return newTimings;
             });
 
-            // result is already used to update state, so we just proceed to the timeout
+            // Note: No adaptive recommendations or behavioral tips in queue mode
+            // These will be calculated during results screen
 
             // Hide feedback after 2 seconds and move to next question
             setTimeout(async () => {
                 setShowAnswerFeedback(false);
-
-                // Show AI insights if available
-                if (result.adaptiveRecommendation.insights.length > 0) {
-                    setAiInsights(result.adaptiveRecommendation.insights);
-                    // Auto-dismiss after 4 seconds
-                    setTimeout(() => {
-                        setAiInsights([]);
-                    }, 4000);
-                }
-
-                // Show behavioral tip if available
-                if (result.behavioralTip) {
-                    setAiInsights(prev => [...prev, result.behavioralTip!]);
-                    setTimeout(() => {
-                        setAiInsights([]);
-                    }, 5000);
-                }
 
                 // ADAPTIVE BATCHING: Load next batch every 5 questions BEFORE checking if quiz should end
                 const nextIndex = currentQuestionIndex + 1;
@@ -349,14 +336,13 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
 
                 if (shouldLoadNext && !loadsAllQuestions) {
                     console.log(`Completed ${nextIndex} questions. Loading next batch...`);
-                    const recommendedDifficulty = result.nextQuestionDifficulty;
 
-                    // Show difficulty change message if applicable
-                    if (recommendedDifficulty !== difficulty) {
-                        showDifficultyMessage(result.adaptiveRecommendation.reason);
-                    }
+                    // Note: In queue mode, we don't have real-time adaptive recommendations
+                    // Use current difficulty level for next batch
+                    // Adaptive difficulty will be calculated during results screen
+                    const recommendedDifficulty = difficulty;
 
-                    // Load next batch of 5 questions at recommended difficulty
+                    // Load next batch of 5 questions at current difficulty
                     await loadNextBatch(recommendedDifficulty);
 
                     // After loading, move to next question (which is now available)

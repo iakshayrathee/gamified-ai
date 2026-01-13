@@ -808,6 +808,263 @@ app.post('/api/attempts', async (req, res) => {
     }
 });
 // ============================================
+// BATCH ATTEMPT ENDPOINT (Optimized for Queue System)
+// ============================================
+/**
+ * Batch attempt endpoint with idempotency and transaction support
+ * Handles multiple attempts from the frontend queue system
+ */
+app.post('/api/attempts/batch', async (req, res) => {
+    try {
+        const { attempts } = req.body;
+        if (!Array.isArray(attempts) || attempts.length === 0) {
+            return res.status(400).json({ error: 'Invalid attempts array' });
+        }
+        console.log(`📥 Received batch of ${attempts.length} attempts`);
+        const savedAttemptIds = [];
+        const errors = [];
+        // Process each attempt with idempotency check
+        for (const attemptData of attempts) {
+            try {
+                // Check if attempt already exists (idempotency)
+                const existing = await prisma.attempt.findUnique({
+                    where: { id: attemptData.id }
+                });
+                if (existing) {
+                    console.log(`⏭️  Skipping duplicate attempt: ${attemptData.id}`);
+                    savedAttemptIds.push(attemptData.id);
+                    continue;
+                }
+                // Classify error type
+                let errorType = 'NONE';
+                let confusionType = null;
+                if (!attemptData.isCorrect) {
+                    if (attemptData.userResponse && attemptData.correctAnswer) {
+                        const correct = attemptData.correctAnswer.toLowerCase();
+                        const response = attemptData.userResponse.toLowerCase();
+                        if ((correct === 'b' && response === 'd') || (correct === 'd' && response === 'b')) {
+                            errorType = 'B_D_CONFUSION';
+                            confusionType = 'b_d_visual';
+                        }
+                        else if ((correct === 'p' && response === 'q') || (correct === 'q' && response === 'p')) {
+                            errorType = 'P_Q_CONFUSION';
+                            confusionType = 'p_q_visual';
+                        }
+                        else if ((correct === 'm' && response === 'n') || (correct === 'n' && response === 'm')) {
+                            errorType = 'M_N_CONFUSION';
+                            confusionType = 'm_n_visual';
+                        }
+                        else if ((correct === 'u' && response === 'n') || (correct === 'n' && response === 'u')) {
+                            errorType = 'U_N_CONFUSION';
+                            confusionType = 'u_n_visual';
+                        }
+                        else {
+                            errorType = 'OTHER';
+                        }
+                    }
+                    else {
+                        errorType = 'OTHER';
+                    }
+                }
+                // Use transaction for atomic operations
+                await prisma.$transaction(async (tx) => {
+                    // 1. Create attempt
+                    const attempt = await tx.attempt.create({
+                        data: {
+                            id: attemptData.id,
+                            childId: attemptData.childId,
+                            questionId: attemptData.questionId,
+                            microSkillId: attemptData.microSkillId,
+                            sessionId: attemptData.sessionId,
+                            isCorrect: attemptData.isCorrect,
+                            responseTimeSeconds: attemptData.responseTimeSeconds,
+                            hintUsed: attemptData.hintUsed || false,
+                            hintCount: attemptData.hintCount || 0,
+                            errorType: errorType,
+                            difficultyLevelAtAttempt: attemptData.difficultyLevelAtAttempt,
+                            userResponse: attemptData.userResponse || null,
+                            confusionType,
+                            createdAt: new Date(attemptData.timestamp)
+                        }
+                    });
+                    // 2. Get existing skill progress
+                    const existingProgress = await tx.skillProgress.findUnique({
+                        where: {
+                            childId_microSkillId: {
+                                childId: attemptData.childId,
+                                microSkillId: attemptData.microSkillId
+                            }
+                        }
+                    });
+                    const newCorrectAttempts = (existingProgress?.correctAttempts || 0) + (attemptData.isCorrect ? 1 : 0);
+                    const newTotalAttempts = (existingProgress?.totalAttempts || 0) + 1;
+                    const newAccuracy = (newCorrectAttempts / newTotalAttempts) * 100;
+                    // Calculate average response time
+                    const newAvgTime = existingProgress
+                        ? (existingProgress.avgResponseTime * existingProgress.totalAttempts + attemptData.responseTimeSeconds) / newTotalAttempts
+                        : attemptData.responseTimeSeconds;
+                    // Update confusion patterns
+                    const existingPatterns = existingProgress?.confusionPatterns;
+                    const updatedPatterns = Array.isArray(existingPatterns)
+                        ? existingPatterns
+                        : [];
+                    if (confusionType && !updatedPatterns.includes(confusionType)) {
+                        updatedPatterns.push(confusionType);
+                    }
+                    // 3. Update skill progress (optimized - no tier calculation here)
+                    await tx.skillProgress.upsert({
+                        where: {
+                            childId_microSkillId: {
+                                childId: attemptData.childId,
+                                microSkillId: attemptData.microSkillId
+                            }
+                        },
+                        update: {
+                            totalAttempts: newTotalAttempts,
+                            correctAttempts: newCorrectAttempts,
+                            accuracyPercentage: newAccuracy,
+                            avgResponseTime: newAvgTime,
+                            confusionPatterns: updatedPatterns,
+                            lastAttemptedAt: new Date()
+                        },
+                        create: {
+                            childId: attemptData.childId,
+                            microSkillId: attemptData.microSkillId,
+                            masteryStatus: 'IN_PROGRESS',
+                            currentDifficultyLevel: attemptData.difficultyLevelAtAttempt,
+                            totalAttempts: 1,
+                            correctAttempts: attemptData.isCorrect ? 1 : 0,
+                            accuracyPercentage: attemptData.isCorrect ? 100 : 0,
+                            avgResponseTime: attemptData.responseTimeSeconds,
+                            confusionPatterns: confusionType ? [confusionType] : [],
+                            learningTrend: 'stable',
+                            lastAttemptedAt: new Date()
+                        }
+                    });
+                    savedAttemptIds.push(attempt.id);
+                });
+            }
+            catch (error) {
+                console.error(`❌ Failed to save attempt ${attemptData.id}:`, error);
+                errors.push({
+                    attemptId: attemptData.id,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
+        }
+        // Queue background jobs for heavy operations (tier calculation, AI tips)
+        if (savedAttemptIds.length > 0) {
+            setImmediate(async () => {
+                try {
+                    // Get unique child-skill combinations
+                    const uniqueCombos = new Map();
+                    for (const attemptData of attempts) {
+                        const key = `${attemptData.childId}-${attemptData.microSkillId}`;
+                        if (!uniqueCombos.has(key)) {
+                            uniqueCombos.set(key, {
+                                childId: attemptData.childId,
+                                microSkillId: attemptData.microSkillId
+                            });
+                        }
+                    }
+                    // Process tier calculation for each unique combo
+                    for (const combo of uniqueCombos.values()) {
+                        await calculateTierForSkill(combo.childId, combo.microSkillId);
+                    }
+                }
+                catch (error) {
+                    console.error('Background job failed:', error);
+                }
+            });
+        }
+        res.json({
+            success: true,
+            savedAttemptIds,
+            savedCount: savedAttemptIds.length,
+            failedCount: errors.length,
+            errors: errors.length > 0 ? errors : undefined
+        });
+    }
+    catch (error) {
+        console.error('Error processing batch attempts:', error);
+        res.status(500).json({ error: 'Failed to process batch attempts' });
+    }
+});
+/**
+ * Helper function to calculate tier for a skill (background job)
+ */
+async function calculateTierForSkill(childId, microSkillId) {
+    try {
+        // Get skill info
+        const skill = await prisma.microSkill.findUnique({
+            where: { id: microSkillId },
+            select: { code: true }
+        });
+        // Only calculate tier for Recognition stages (RF.1.1, RF.2.1, RF.3.1, RF.4.1)
+        if (!skill?.code.match(/^RF\.[1-4]\.1$/)) {
+            return;
+        }
+        // Get skill progress
+        const skillProgress = await prisma.skillProgress.findUnique({
+            where: {
+                childId_microSkillId: {
+                    childId,
+                    microSkillId
+                }
+            }
+        });
+        if (!skillProgress)
+            return;
+        // Only recalculate tier every 10 attempts
+        if (skillProgress.totalAttempts % 10 !== 0) {
+            return;
+        }
+        console.log(`🔄 Calculating tier for ${skill.code} (${skillProgress.totalAttempts} attempts)`);
+        // Get all word mastery records
+        const allWordMastery = await prisma.wordMastery.findMany({
+            where: { childId, microSkillId }
+        });
+        // Get recent attempts for error pattern analysis
+        const recentAttempts = await prisma.attempt.findMany({
+            where: { childId, microSkillId },
+            orderBy: { createdAt: 'desc' },
+            take: 20
+        });
+        const { default: SightWordService } = await Promise.resolve().then(() => __importStar(require('./lib/sight-word-service')));
+        const overallTier = SightWordService.calculateOverallTier(allWordMastery);
+        const errorPatterns = SightWordService.analyzeErrorPatterns(recentAttempts);
+        const riskIndicator = SightWordService.calculateRiskIndicator(errorPatterns, overallTier.tier);
+        // Store tier information in aiInsights
+        const aiInsights = {
+            tier: overallTier.tier,
+            tierLabel: overallTier.label,
+            tierEmoji: overallTier.emoji,
+            tierDescription: overallTier.description,
+            errorPatterns,
+            riskIndicator,
+            wordsAttempted: allWordMastery.length,
+            wordsMastered: allWordMastery.filter(wm => wm.tier === 1).length,
+            calculatedAt: new Date().toISOString(),
+            isBaselineDiagnostic: true
+        };
+        await prisma.skillProgress.update({
+            where: {
+                childId_microSkillId: {
+                    childId,
+                    microSkillId
+                }
+            },
+            data: {
+                aiInsights: JSON.stringify(aiInsights)
+            }
+        });
+        console.log(`✅ Tier calculated: ${overallTier.tier} (${overallTier.label})`);
+    }
+    catch (error) {
+        console.error('Error calculating tier:', error);
+    }
+}
+// ============================================
 // ASSET MANAGEMENT ENDPOINTS
 // ============================================
 // Upload single asset
