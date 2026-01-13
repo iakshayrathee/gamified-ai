@@ -402,7 +402,7 @@ export default function FlashcardRecognitionGame({
                 >
                     <div className="bg-white/90 backdrop-blur-sm rounded-2xl px-8 py-4 shadow-xl flex items-center justify-between">
                         <h2 className="text-3xl font-bold text-purple-800">
-                            {question?.promptText}
+                            Listen and find the word
                         </h2>
                         <div className="flex items-center gap-4">
                             {/* Timer */}

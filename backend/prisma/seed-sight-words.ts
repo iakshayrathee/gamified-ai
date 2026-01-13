@@ -354,7 +354,7 @@ async function main() {
                     data: {
                         microSkillId: skill.id,
                         difficultyLevel: 1, // All words in a list have same difficulty
-                        promptText: `Find the word: "${word}"`,
+                        promptText: word, // Only the word itself - will be spoken aloud, not displayed
                         correctAnswer: word,
                         distractors: JSON.stringify(distractors),
                         hasConfusingDistractors: false,
