@@ -356,6 +356,9 @@ enum GameTemplate {
   FIND_THE_WORD
   SEQUENCING
   ODD_ONE_OUT
+  NUMBER_LINE_BUILDER
+  FILL_MISSING_NUMBERS
+  JOIN_THE_DOTS
 }
 
 enum MasteryStatus {
@@ -376,6 +379,8 @@ enum ErrorType {
   CONTEXTUAL_ERROR      // Wrong word but grammatically correct (Reading stage)
   SPELLING_REVERSAL     // Letter order errors (Spelling stage)
   SPELLING_OMISSION     // Missing letters (Spelling stage)
+  NUMBER_REVERSAL       // Number reversals like 12 ↔ 21 (Numeracy)
+  SKIP_COUNTING_ERROR   // Skip counting errors (Numeracy)
   OTHER
 }
 

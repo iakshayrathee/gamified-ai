@@ -379,6 +379,7 @@ function getEmoji(code: string): string {
         'LS': '👂',
         'LK': '📝',
         'WR': '✍️',
+        'NUM': '🔢',
         'default': '📚'
     };
     return emojiMap[code] || emojiMap['default'];

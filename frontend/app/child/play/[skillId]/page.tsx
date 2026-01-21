@@ -24,6 +24,9 @@ import FlashcardRecognitionGame from '@/components/game-templates/FlashcardRecog
 import RecallGame from '@/components/game-templates/RecallGame';
 import ReadingComprehensionGame from '@/components/game-templates/ReadingComprehensionGame';
 import SpellingGame from '@/components/game-templates/SpellingGame';
+import NumberLineBuilderGame from '@/components/game-templates/NumberLineBuilderGame';
+import FillMissingNumbersGame from '@/components/game-templates/FillMissingNumbersGame';
+import JoinTheDotsGame from '@/components/game-templates/JoinTheDotsGame';
 import QuizResults from '@/components/quiz/QuizResults';
 import QuizTimer from '@/components/quiz/QuizTimer';
 import QuizRulesModal from '@/components/quiz/QuizRulesModal';
@@ -141,6 +144,13 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
             }
         };
     }, []);
+
+    // Auto-close rules modal for numeracy games
+    useEffect(() => {
+        if (skill && skill.code.startsWith('NUM.')) {
+            setShowRulesModal(false);
+        }
+    }, [skill]);
 
     async function loadInitialData() {
         if (isLoadingRef.current || !childId) return;
@@ -974,6 +984,12 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                                         return <SequencingGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'ODD_ONE_OUT':
                                         return <OddOneOutGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                    case 'NUMBER_LINE_BUILDER':
+                                        return <NumberLineBuilderGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                    case 'FILL_MISSING_NUMBERS':
+                                        return <FillMissingNumbersGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                    case 'JOIN_THE_DOTS':
+                                        return <JoinTheDotsGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     default:
                                         console.error('Unknown game template:', template);
                                         return <TapSelectGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
