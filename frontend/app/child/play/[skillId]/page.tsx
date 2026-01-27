@@ -27,6 +27,10 @@ import SpellingGame from '@/components/game-templates/SpellingGame';
 import NumberLineBuilderGame from '@/components/game-templates/NumberLineBuilderGame';
 import FillMissingNumbersGame from '@/components/game-templates/FillMissingNumbersGame';
 import JoinTheDotsGame from '@/components/game-templates/JoinTheDotsGame';
+import ShapeMatchingGame from '@/components/game-templates/ShapeMatchingGame';
+import WorksheetQuizGame from '@/components/game-templates/WorksheetQuizGame';
+import OddOneOutWorksheetGame from '@/components/game-templates/OddOneOutWorksheetGame';
+import WorksheetVoiceGame from '@/components/game-templates/WorksheetVoiceGame';
 import QuizResults from '@/components/quiz/QuizResults';
 import QuizTimer from '@/components/quiz/QuizTimer';
 import QuizRulesModal from '@/components/quiz/QuizRulesModal';
@@ -114,6 +118,11 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
     // Timer countdown
     useEffect(() => {
         if (showRulesModal || showResults || showAnswerFeedback) {
+            return;
+        }
+
+        // Disable timer for Worksheet domain
+        if (skill?.domain?.code === 'WS') {
             return;
         }
 
@@ -821,24 +830,28 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                         <Clock className="w-4 h-4 text-blue-600" />
                         <span className="font-semibold text-blue-700 text-sm">Timer</span>
                     </div>
-                    <QuizTimer
-                        timeRemaining={questionTimer}
-                        totalTime={30}
-                        isActive={!showRulesModal && !showResults}
-                    />
-                    {quizStartTime && (
-                        <div className="mt-2 text-center">
-                            <div className="text-xs text-gray-600 font-medium">Total Time</div>
-                            <div className="text-base font-bold text-blue-700">
-                                {Math.floor((Date.now() - quizStartTime) / 60000)}:{String(Math.floor(((Date.now() - quizStartTime) % 60000) / 1000)).padStart(2, '0')}
-                            </div>
-                        </div>
-                    )}
-                    {lastQuestionTime !== null && (
-                        <div className="mt-2 text-center">
-                            <div className="text-xs text-gray-600 font-medium">Last Question</div>
-                            <div className="text-base font-bold text-green-600">{lastQuestionTime.toFixed(1)}s</div>
-                        </div>
+                    {skill?.domain?.code !== 'WS' && (
+                        <>
+                            <QuizTimer
+                                timeRemaining={questionTimer}
+                                totalTime={30}
+                                isActive={!showRulesModal && !showResults}
+                            />
+                            {quizStartTime && (
+                                <div className="mt-2 text-center">
+                                    <div className="text-xs text-gray-600 font-medium">Total Time</div>
+                                    <div className="text-base font-bold text-blue-700">
+                                        {Math.floor((Date.now() - quizStartTime) / 60000)}:{String(Math.floor(((Date.now() - quizStartTime) % 60000) / 1000)).padStart(2, '0')}
+                                    </div>
+                                </div>
+                            )}
+                            {lastQuestionTime !== null && (
+                                <div className="mt-2 text-center">
+                                    <div className="text-xs text-gray-600 font-medium">Last Question</div>
+                                    <div className="text-base font-bold text-green-600">{lastQuestionTime.toFixed(1)}s</div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </motion.div>
@@ -917,11 +930,8 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                             className="w-full h-full flex items-center justify-center"
                         >
                             {(() => {
-                                console.log('Current question:', currentQuestion);
-                                console.log('Game template:', currentQuestion?.gameTemplate);
-
-                                // Fallback to TAP_SELECT if no gameTemplate
-                                const template = currentQuestion?.gameTemplate || 'TAP_SELECT';
+                                // Extract dynamic template from question assetUrls if available
+                                const template = (currentQuestion.assetUrls as any)?.gameTemplate || currentQuestion?.gameTemplate || skill?.gameTemplate || 'TAP_SELECT';
 
                                 switch (template) {
                                     case 'TAP_SELECT':
@@ -990,6 +1000,20 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
                                         return <FillMissingNumbersGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     case 'JOIN_THE_DOTS':
                                         return <JoinTheDotsGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                    case 'SHAPE_MATCHING':
+                                        return <ShapeMatchingGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                    case 'ODD_ONE_OUT_WORKSHEET':
+                                        return <OddOneOutWorksheetGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                    case 'TEXT_INPUT':
+                                        // For Worksheet domain, use the specialized voice component or quiz component
+                                        if (skill?.domain?.code === 'WS') {
+                                            // Handle specific worksheet skills
+                                            if (skill?.code === 'WS.2') {
+                                                return <WorksheetVoiceGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                            }
+                                            return <WorksheetQuizGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
+                                        }
+                                        return <TapSelectGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
                                     default:
                                         console.error('Unknown game template:', template);
                                         return <TapSelectGame question={currentQuestion} onAnswer={handleAnswer} difficultyLevel={difficulty} showHint={false} isRulesModalOpen={showRulesModal} />;
@@ -1021,7 +1045,7 @@ export default function SkillPlayPage({ params }: { params: Promise<{ skillId: s
 
             {/* AI Coach Messages - Positioned at TOP RIGHT to avoid overlap */}
             <AnimatePresence>
-                {aiInsights.length > 0 && (
+                {aiInsights.length > 0 && skill?.domain?.code !== 'WS' && (
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9, x: 20 }}
                         animate={{ opacity: 1, scale: 1, x: 0 }}

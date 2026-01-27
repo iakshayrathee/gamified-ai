@@ -711,14 +711,6 @@ app.post('/api/attempts', async (req: Request, res: Response) => {
         // Update confusion patterns
         const updatedPatterns = updateConfusionPatterns(existingProgress?.confusionPatterns || [], confusionType);
 
-        // Generate behavioral tip (every 5 attempts to minimize API calls)
-        let behavioralTip: string | null = null;
-        if (newTotalAttempts % 5 === 0) {
-            const { default: AITipsService } = await import('./lib/ai-tips-service');
-            const tip = await AITipsService.generateBehavioralTip(childId, recentAttempts);
-            behavioralTip = tip.message;
-        }
-
         // Update skill progress with recalculated accuracy and AI insights
         const updatedProgress = await prisma.skillProgress.upsert({
             where: {
@@ -755,6 +747,15 @@ app.post('/api/attempts', async (req: Request, res: Response) => {
                 microSkill: true
             }
         });
+
+        // Generate behavioral tip (every 5 attempts to minimize API calls)
+        // Disable for Worksheet domain
+        let behavioralTip: string | null = null;
+        if (newTotalAttempts % 5 === 0 && !updatedProgress.microSkill.code.startsWith('WS')) {
+            const { default: AITipsService } = await import('./lib/ai-tips-service');
+            const tip = await AITipsService.generateBehavioralTip(childId, recentAttempts);
+            behavioralTip = tip.message;
+        }
 
         // Calculate tier for Reading Foundation Recognition stages (RF.1.1, RF.2.1, RF.3.1, RF.4.1)
         // This is the baseline diagnostic signal
